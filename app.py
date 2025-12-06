@@ -13,7 +13,7 @@ st.markdown("Version 1 of Wipro Worksforce Dashboard: This contains insights on 
 
 # --- SIDEBAR: SETTINGS & FILE UPLOAD ---
 st.sidebar.header("Upload")
-uploaded_file = st.sidebar.file_uploader("IMPORTANT: Please make sure that you rename the file as 'data set' otherwise this tool won't work", type=['xlsb', 'xlsx'])
+uploaded_file = st.sidebar.file_uploader("**IMPORTANT: Please make sure that you rename the file as 'data set' otherwise this tool won't work**", type=['xlsb', 'xlsx'])
 
 if uploaded_file is not None:
     # --- 1. DATA LOADING & PREPROCESSING ---
