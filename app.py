@@ -8,6 +8,7 @@ import numpy as np
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
 st.title("Wipro Dashboard of Rewards Management Group 13 v1")
 
+# --- SIDEBAR ADDITIONS ---
 st.sidebar.header("UPLOAD")
 uploaded_file = st.sidebar.file_uploader(
     "Please upload the Wipro File here (.xlsb or .xlsx)", 
@@ -16,6 +17,22 @@ uploaded_file = st.sidebar.file_uploader(
 
 if uploaded_file is not None:
     uploaded_file.name = 'data set.xlsb'
+
+# Site Visit Counter (Session Based)
+if 'visit_count' not in st.session_state:
+    st.session_state.visit_count = 0
+st.session_state.visit_count += 1
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Site Metrics")
+st.sidebar.metric("Session Interactions", st.session_state.visit_count)
+
+# Contact Box
+st.sidebar.markdown("---")
+st.sidebar.subheader("📬 Contact Us")
+st.sidebar.info("For queries, please reach out to:\n\n**Email:** group13@tiss.edu")
+
+# --- END SIDEBAR ADDITIONS ---
 
 # Data Processing Function
 @st.cache_data
@@ -145,7 +162,7 @@ with tab1:
     with col1:
         st.subheader("Pay Ranges by Job Band")
         fig1, ax1 = plt.subplots(figsize=(10, 5))
-        # Added hue to force legend, positioned top right
+        # Updated Legend: Top Right
         sns.boxplot(x='Band', y='Annual_TCC (PPP USD)', data=df, ax=ax1, hue='Band', dodge=False)
         plt.title('Pay Ranges by Job Band (USD)')
         ax1.legend(title='Job Band', bbox_to_anchor=(1, 1), loc='upper right')
@@ -154,7 +171,7 @@ with tab1:
     with col2:
         st.subheader("Headcount by Band")
         fig2, ax2 = plt.subplots(figsize=(10, 5))
-        # Added hue to force legend, positioned top right
+        # Updated Legend: Top Right
         sns.countplot(x='Band', data=df, palette='viridis', ax=ax2, hue='Band', dodge=False)
         plt.title('Headcount by Job Band')
         ax2.legend(title='Job Band', bbox_to_anchor=(1, 1), loc='upper right')
@@ -162,7 +179,7 @@ with tab1:
 
     st.subheader("Distribution of Annual Pay")
     fig3, ax3 = plt.subplots(figsize=(10, 3))
-    # Added label for legend
+    # Updated Legend: Top Right
     sns.histplot(df['Annual_TCC (PPP USD)'], bins=100, kde=True, color='skyblue', ax=ax3, label='Pay Distribution')
     plt.xlim(0, 250000)
     ax3.legend(bbox_to_anchor=(1, 1), loc='upper right')
@@ -175,13 +192,12 @@ with tab2:
     if 'Compa_Ratio' in df.columns:
         st.subheader("Overall Market Positioning")
         fig4, ax4 = plt.subplots(figsize=(10, 3))
-        # Added label for histplot data
+        # Updated Legend: Top Right
         sns.histplot(data=df, x='Compa_Ratio', kde=True, bins=100, color='teal', ax=ax4, label='Population Distribution')
         ax4.axvline(1.0, color='red', linestyle='--', linewidth=2, label='Market Median (1.0)')
         ax4.axvline(0.8, color='orange', linestyle=':', linewidth=2, label='Threshold (0.8)')
         ax4.axvline(1.2, color='orange', linestyle=':', linewidth=2, label='Threshold (1.2)')
         ax4.set_xlim(0, 4.5)
-        # Legend anchored top right
         ax4.legend(bbox_to_anchor=(1, 1), loc='upper right')
         st.pyplot(fig4)
 
@@ -192,8 +208,8 @@ with tab2:
             style='Positioning_Status', s=100, palette='viridis', ax=ax5
         )
         ax5.axhline(1.0, color='red', linestyle='--', alpha=0.5, label='Market Median')
-        # Legend anchored top right (outside to avoid crowding)
-        plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+        # Legend anchored top right
+        plt.legend(bbox_to_anchor=(1, 1), loc='upper right')
         st.pyplot(fig5)
 
         st.subheader("Median Positioning By Band")
@@ -223,15 +239,18 @@ with tab3:
     fig7, axes = plt.subplots(1, 3, figsize=(20, 6))
     
     if 'Clean_Skill' in df_viz.columns:
+        # Updated Legend: Top Right
         sns.countplot(data=df_viz, x='Clean_Skill', palette='viridis', ax=axes[0], hue='Clean_Skill', dodge=False)
         axes[0].tick_params(axis='x', rotation=45)
         axes[0].legend(bbox_to_anchor=(1, 1), loc='upper right', title='Skill')
     
     if 'Performance_Rating' in df_viz.columns:
+        # Updated Legend: Top Right
         sns.histplot(data=df_viz, x='Performance_Rating', bins=10, kde=True, color='orange', ax=axes[1], label='Distribution')
         axes[1].legend(bbox_to_anchor=(1, 1), loc='upper right')
     
     if 'Clean_Tenure' in df_viz.columns:
+        # Updated Legend: Top Right
         sns.histplot(data=df_viz, x='Clean_Tenure', bins=20, kde=True, color='teal', ax=axes[2], label='Distribution')
         axes[2].legend(bbox_to_anchor=(1, 1), loc='upper right')
     
@@ -240,18 +259,19 @@ with tab3:
     st.subheader("Exploratory insights of current workforce")
     fig8, axes2 = plt.subplots(2, 2, figsize=(15, 12))
     
+    # Updated Legend: Top Right
     sns.countplot(data=df_viz, x='Band', hue='Clean_Skill', palette='viridis', ax=axes2[0, 0])
     axes2[0, 0].set_title('Skill Mix by Band')
     axes2[0, 0].legend(bbox_to_anchor=(1, 1), loc='upper right', title='Skill')
     
     if 'Performance_Rating' in df_viz.columns:
-        # Added hue to force legend
+        # Updated Legend: Top Right
         sns.boxplot(data=df_viz, x='Band', y='Performance_Rating', palette='Oranges', ax=axes2[0, 1], hue='Band', dodge=False)
         axes2[0, 1].set_title('Performance Distribution')
         axes2[0, 1].legend(bbox_to_anchor=(1, 1), loc='upper right', title='Band')
 
     if 'Clean_Experience' in df_viz.columns:
-        # Added hue to force legend
+        # Updated Legend: Top Right
         sns.boxplot(data=df_viz, x='Band', y='Clean_Experience', palette='Blues', ax=axes2[1, 0], hue='Band', dodge=False)
         axes2[1, 0].set_title('Total Experience Profile')
         axes2[1, 0].legend(bbox_to_anchor=(1, 1), loc='upper right', title='Band')
@@ -263,7 +283,8 @@ with tab3:
             hiring_strategy = hiring_strategy[cols_to_plot]
             hiring_strategy.plot(kind='bar', stacked=True, color=['#d73027', '#4575b4'], width=0.8, ax=axes2[1, 1])
             axes2[1, 1].set_title('Build vs Buy Ratio')
-            axes2[1, 1].legend(bbox_to_anchor=(1, 1), loc='upper left', title='Source')
+            # Legend anchored top right
+            axes2[1, 1].legend(bbox_to_anchor=(1, 1), loc='upper right', title='Source')
     
     st.pyplot(fig8)
 
@@ -277,7 +298,7 @@ with tab4:
         st.subheader("Pay vs Performance")
         if 'Performance_Rating' in df.columns:
             fig9, ax9 = plt.subplots(figsize=(10, 4))
-            # Added labels for legend
+            # Updated Legend: Top Right
             sns.regplot(data=df, x='Performance_Rating', y='Annual_TCC (PPP USD)', 
                         scatter_kws={'alpha': 0.3, 'color': 'gray', 'label': 'Employee Data'}, 
                         line_kws={'color': 'red', 'label': 'Trend Line'}, ax=ax9)
@@ -290,8 +311,8 @@ with tab4:
             fig10, ax10 = plt.subplots(figsize=(10, 4))
             sns.scatterplot(data=df, x='Clean_Experience', y='Annual_TCC (PPP USD)', 
                             hue='Band', palette='coolwarm', alpha=0.6, ax=ax10)
-            # Legend anchored top right
-            ax10.legend(bbox_to_anchor=(1, 1), loc='upper left', title='Band')
+            # Updated Legend: Top Right
+            ax10.legend(bbox_to_anchor=(1, 1), loc='upper right', title='Band')
             st.pyplot(fig10)
 
     st.subheader("Gender Pay Equity Check")
@@ -299,7 +320,7 @@ with tab4:
         df['Clean_Gender'] = df['Gender'].astype(str).str.upper().str.strip()
         fig11, ax11 = plt.subplots(figsize=(12, 4))
         sns.boxplot(data=df, x='Band', y='Annual_TCC (PPP USD)', hue='Clean_Gender', palette='pastel', ax=ax11)
-        # Legend anchored top right
+        # Updated Legend: Top Right
         ax11.legend(bbox_to_anchor=(1, 1), loc='upper right', title='Gender')
         st.pyplot(fig11)
 
