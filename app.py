@@ -4,24 +4,21 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
-# --- 1. Page Config ---
+# Page Config 
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
 st.title("Wipro Dashboard")
 
-# --- 2. File Uploader ---
+# File Uploader 
 st.sidebar.header("Upload your files here")
 uploaded_file = st.sidebar.file_uploader(
     "**IMPORTANT:** Make sure the name of the file is **'data set'** and the format is **.xlsb**", 
     type=['xlsb', 'xlsx']
 )
 
-# --- 3. Data Processing Function ---
+# Data Processing Function
 @st.cache_data
 def process_data(file):
-    # Load Data
     df = pd.read_excel(file, engine='pyxlsb')
-    
-    # Clean Column Names
     df.columns = df.columns.str.strip()
     
     # 1. Currency Conversion Setup
@@ -40,7 +37,6 @@ def process_data(file):
             return None
 
     target_cols = ['Annual_TCC', 'P10', 'P25', 'P50', 'P75', 'P90']
-    # Check if columns exist before processing
     existing_cols = [c for c in target_cols if c in df.columns]
     
     for col in existing_cols:
@@ -48,17 +44,16 @@ def process_data(file):
         df[f'{col} (PPP USD)'] = df.apply(lambda row: convert_currency(row, col, ppp_rates), axis=1)
 
     # 2. Band Sorting
-    hierarchy_order = ['A3', 'AA', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3', 'TEAMRBOW']
+    hierarchy_order = ['TEAMRBOW', 'A3', 'AA', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3']
     if 'Band' in df.columns:
         band_type = pd.CategoricalDtype(categories=hierarchy_order, ordered=True)
         df['Band'] = df['Band'].astype(band_type)
         df = df.sort_values(by='Band')
 
-    # 3. Market Positioning (Compa-Ratio)
+    # 3. Compa-Ratio
     market_col = 'P50 (PPP USD)'
     if market_col in df.columns:
         df[market_col] = pd.to_numeric(df[market_col], errors='coerce')
-        # Filter out 0 or null market data to avoid division errors
         df = df[df[market_col] > 0]
         df['Compa_Ratio'] = df['Annual_TCC (PPP USD)'] / df[market_col]
 
@@ -92,14 +87,14 @@ def process_data(file):
     if 'Experience' in df.columns:
         df['Clean_Experience'] = pd.to_numeric(df['Experience'], errors='coerce')
     
-    # Build vs Buy Logic
+    # 7. Build vs Buy Logic
     if 'Clean_Experience' in df.columns and 'Clean_Tenure' in df.columns:
         df['Prior_Experience'] = (df['Clean_Experience'] - df['Clean_Tenure']).clip(lower=0)
         df['Hiring_Source'] = np.where(df['Prior_Experience'] < 2.0, 'Home Grown (Build)', 'Outside Hire (Buy)')
         
     return df
 
-# --- Helper Function for Indian Currency Formatting ---
+# Indian Currency Formatting
 def format_indian_currency(value):
     if pd.isna(value):
         return "₹0"
@@ -110,12 +105,9 @@ def format_indian_currency(value):
     if len(s_val) <= 3:
         return f"₹{s_val}"
     
-    # The last 3 digits
     last_three = s_val[-3:]
-    # The rest
     rest = s_val[:-3]
     
-    # Group the rest in 2s
     groups = []
     while len(rest) > 2:
         groups.insert(0, rest[-2:])
@@ -125,7 +117,7 @@ def format_indian_currency(value):
     formatted = ",".join(groups) + "," + last_three
     return f"₹{formatted}"
 
-# --- 4. Main App Logic ---
+# Main App Logic
 
 if uploaded_file is None:
     st.info("⬅️ Please use the sidebar and upload the appropriate file to begin analysis.")
@@ -138,11 +130,11 @@ except Exception as e:
     st.error(f"Error processing file: {e}")
     st.stop()
 
-# --- 5. Visualizations in Tabs ---
+# Visualizations in Tabs
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Market Strategy", "Workforce Analysis", "Pay Drivers", "Tools & Calculators"])
 
-# === TAB 1: OVERVIEW ===
+# TAB 1: OVERVIEW
 with tab1:
     st.header("Overview: Pay Ranges & Distribution at Wipro")
     
@@ -168,7 +160,7 @@ with tab1:
     plt.xlim(0, 250000)
     st.pyplot(fig3)
 
-# === TAB 2: MARKET STRATEGY ===
+# TAB 2: MARKET STRATEGY
 with tab2:
     st.header("Market Positioning Strategy")
     
@@ -208,11 +200,10 @@ with tab2:
                 ax6.text(x, y + 0.01, f'{y:.2f}', ha='center', fontweight='bold')
         st.pyplot(fig6)
 
-# === TAB 3: WORKFORCE ANALYSIS ===
+# TAB 3: WORKFORCE ANALYSIS
 with tab3:
     st.header("Workforce Capabilities & Strategy")
     
-    # Re-setup specific df for visualization to ensure clean data
     df_viz = df.copy()
     
     st.subheader("Population, Ratings, and Tenure Check")
@@ -233,24 +224,19 @@ with tab3:
     st.subheader("Strategic Deep Dive")
     fig8, axes2 = plt.subplots(2, 2, figsize=(15, 12))
     
-    # Skill Mix
     sns.countplot(data=df_viz, x='Band', hue='Clean_Skill', palette='viridis', ax=axes2[0, 0])
     axes2[0, 0].set_title('Skill Mix by Band')
     
-    # Performance
     if 'Performance_Rating' in df_viz.columns:
         sns.boxplot(data=df_viz, x='Band', y='Performance_Rating', palette='Oranges', ax=axes2[0, 1])
         axes2[0, 1].set_title('Performance Distribution')
 
-    # Experience
     if 'Clean_Experience' in df_viz.columns:
         sns.boxplot(data=df_viz, x='Band', y='Clean_Experience', palette='Blues', ax=axes2[1, 0])
         axes2[1, 0].set_title('Total Experience Profile')
 
-    # Hiring Strategy
     if 'Hiring_Source' in df_viz.columns:
         hiring_strategy = pd.crosstab(df_viz['Band'], df_viz['Hiring_Source'], normalize='index')
-        # Ensure columns exist before plotting
         cols_to_plot = [c for c in ['Outside Hire (Buy)', 'Home Grown (Build)'] if c in hiring_strategy.columns]
         if cols_to_plot:
             hiring_strategy = hiring_strategy[cols_to_plot]
@@ -259,7 +245,7 @@ with tab3:
     
     st.pyplot(fig8)
 
-# === TAB 4: PAY DRIVERS ===
+# TAB 4: PAY DRIVERS
 with tab4:
     st.header("What drives pay at Wipro?")
     
@@ -289,7 +275,6 @@ with tab4:
         st.pyplot(fig11)
 
     st.subheader("Primary Pay Driver Correlation")
-    # Prepare correlation data
     cols_map = {
         'Annual_TCC (PPP USD)': 'Annual Pay',
         'Clean_Experience': 'Total Experience',
@@ -297,7 +282,6 @@ with tab4:
         'Performance_Rating': 'Performance'
     }
     
-    # Filter columns that actually exist
     valid_cols = [k for k in cols_map.keys() if k in df.columns]
     
     if valid_cols:
@@ -315,64 +299,52 @@ with tab4:
         )
         st.pyplot(fig12)
 
-# === TAB 5: TOOLS (WITH INDIAN FORMATTING) ===
+# TAB 5: TOOLS
 with tab5:
     st.header("Tools & Calculators")
     st.markdown("These tools are designed to make data-driven decisions.")
 
-    # Define the PPP Conversion rate for display (Derived from your code: 1 USD = 22.54 INR in PPP terms)
     PPP_INR_RATE = 22.54 
 
-    # --- Tool 1: Recruitment Salary Fitment Calculator ---
     with st.expander("Recruitment Salary Fitment Calculator", expanded=True):
         st.write("Use this tool to determine the appropriate offer range for a new hire.")
         
-        # 1. Create Input Columns
         calc_col1, calc_col2 = st.columns(2)
         
         with calc_col1:
-            # Dropdown to select the Band (filters data)
             c_band = st.selectbox("Select Candidate Job Band", options=df['Band'].unique())
         
         with calc_col2:
-            # Number input for experience (used for recommendation logic)
             c_exp = st.number_input("Candidate Years of Experience", min_value=0.0, step=0.5)
 
-        # 2. Button to Trigger Calculation
         if st.button("Calculate Recommended Offer"):
             
-            # 3. Filter the dataframe to only get employees in the selected Band
             band_data = df[df['Band'] == c_band]
             
-            # 4. Calculate Statistics (PPP USD)
             stats = band_data['Annual_TCC (PPP USD)'].describe()
             p25 = stats['25%']
             p50 = stats['50%']
             p75 = stats['75%']
             
-            # 5. Display the Numbers (Dual Currency with Indian Formatting)
             st.markdown(f"### Market Benchmarks for Band: {c_band}")
             
             metric_col1, metric_col2, metric_col3 = st.columns(3)
             
-            # Helper to format string
             def fmt_currency(usd_val):
                 inr_val = usd_val * PPP_INR_RATE
-                # Use custom formatting for INR
                 return f"${usd_val:,.0f} / {format_indian_currency(inr_val)}"
 
             metric_col1.metric("Low End (25th %)", fmt_currency(p25))
             metric_col2.metric("Median (50th %)", fmt_currency(p50))
             metric_col3.metric("High End (75th %)", fmt_currency(p75))
             
-            # 6. Recommendation Logic
             st.markdown("#### Recommendation:")
             if c_exp > 5:
                 st.success(f"Candidate is experienced ({c_exp} years). \n\n**Target Offer:** {fmt_currency(p50)} - {fmt_currency(p75)}")
             else:
                 st.info(f"Candidate is junior/mid-level ({c_exp} years). \n\n**Target Offer:** {fmt_currency(p25)} - {fmt_currency(p50)}")
 
-    # --- Tool 2: Flight Risk Detector ---
+    # Tool 2: Flight Risk Detector
     with st.expander("Flight Risk Detector"):
         st.write("High performers who are underpaid")
         
@@ -388,14 +360,13 @@ with tab5:
         else:
             st.warning("Performance or Market data missing.")
 
-    # --- Tool 3: Pay Equity Auditor ---
+    # Tool 3: Pay Equity Auditor
     with st.expander("Individual Pay Equity Auditor"):
         st.write("Check specific employee for internal/external equity.")
         
         emp_id = st.text_input("Enter Employee ID to Audit:")
         
         if emp_id:
-            # Check if ID exists
             record = df[df['ID'].astype(str) == str(emp_id)]
             
             if not record.empty:
