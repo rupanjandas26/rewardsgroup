@@ -9,7 +9,7 @@ st.set_page_config(page_title="Wipro Workforce Rewards Analysis", layout="wide")
 
 # Title and Introduction
 st.title("Wipro Analysis: Group 13")
-st.markdown("Version 1 of Wipro Worksforce Dashboard: This contains insights on Wipro's Market Positioning and Internal Equity Drivers. Please note that all currency figures is denoted by USD")
+st.markdown("Version 1 of Wipro Worksforce Dashboard: This contains insights on Wipro's Market Positioning and Internal Equity Drivers. Please note that all currency figures is denoted by USD.")
 
 # --- SIDEBAR: SETTINGS & FILE UPLOAD ---
 st.sidebar.header("Upload")
