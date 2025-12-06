@@ -48,7 +48,7 @@ def process_data(file):
         df[f'{col} (PPP USD)'] = df.apply(lambda row: convert_currency(row, col, ppp_rates), axis=1)
 
     # 2. Band Sorting
-    hierarchy_order = ['AA', 'A3', 'B1', 'B2', 'B3', 'C1', 'C3', 'D1', 'D2', 'D3']
+    hierarchy_order = ['A3', 'AA', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3']
     if 'Band' in df.columns:
         band_type = pd.CategoricalDtype(categories=hierarchy_order, ordered=True)
         df['Band'] = df['Band'].astype(band_type)
