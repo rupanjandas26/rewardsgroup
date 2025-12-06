@@ -19,38 +19,6 @@ uploaded_file = st.sidebar.file_uploader(
 if uploaded_file is not None:
     uploaded_file.name = 'data set.xlsb'
 
-# --- PERSISTENT VISIT COUNTER LOGIC ---
-# This saves the count to a file so it survives refreshes
-count_file = "visit_count.txt"
-
-if 'visit_count' not in st.session_state:
-    # 1. Check if the file exists, if not create it
-    if not os.path.exists(count_file):
-        with open(count_file, "w") as f:
-            f.write("0")
-    
-    # 2. Read the current count from the file
-    with open(count_file, "r") as f:
-        try:
-            current_count = int(f.read())
-        except:
-            current_count = 0
-            
-    # 3. Increment the count
-    new_count = current_count + 1
-    
-    # 4. Write the new count back to the file
-    with open(count_file, "w") as f:
-        f.write(str(new_count))
-        
-    # 5. Save to session state so we don't double count on button clicks
-    st.session_state.visit_count = new_count
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Thanks for Visiting!")
-# Display the persistent count
-st.sidebar.metric("Total Page Visits", st.session_state.visit_count)
-
 # Contact Box
 st.sidebar.markdown("---")
 st.sidebar.subheader("Contact Us")
