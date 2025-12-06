@@ -6,11 +6,11 @@ import numpy as np
 
 # Page Config 
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
-st.title("Wipro Dashboard")
+st.title("Wipro Dashboard of Rewards Management Group 13 v1")
 
-st.sidebar.header("Upload your files here")
+st.sidebar.header("UPLOAD")
 uploaded_file = st.sidebar.file_uploader(
-    "Upload your data file (.xlsb or .xlsx)", 
+    "Please upload the Wipro File here (.xlsb or .xlsx)", 
     type=['xlsb', 'xlsx']
 )
 
@@ -122,12 +122,12 @@ def format_indian_currency(value):
 # Main App Logic
 
 if uploaded_file is None:
-    st.info("⬅️ Please use the sidebar and upload the appropriate file to begin analysis.")
+    st.info("⬅️ Please use the sidebar to upload the appropriate file.")
     st.stop()
 
 try:
     df = process_data(uploaded_file)
-    st.success("Data Processed Successfully!")
+    st.success("Success! All Currency Figues in the visualizations are in PPP USD")
 except Exception as e:
     st.error(f"Error processing file: {e}")
     st.stop()
@@ -138,7 +138,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Market Strategy", "Workforc
 
 # TAB 1: OVERVIEW
 with tab1:
-    st.header("Overview: Pay Ranges & Distribution at Wipro")
+    st.header("Overview: Pay Ranges & Distribution")
     
     col1, col2 = st.columns(2)
     
@@ -164,7 +164,7 @@ with tab1:
 
 # TAB 2: MARKET STRATEGY
 with tab2:
-    st.header("Market Positioning Strategy")
+    st.header("External Equity Overview")
     
     if 'Compa_Ratio' in df.columns:
         st.subheader("Overall Market Positioning")
@@ -187,7 +187,7 @@ with tab2:
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         st.pyplot(fig5)
 
-        st.subheader("Median Positioning (Strategy Line)")
+        st.subheader("Median Positioning By Band")
         market_strategy = df.groupby('Band')[['Compa_Ratio']].median().reset_index()
         fig6, ax6 = plt.subplots(figsize=(12, 6))
         sns.lineplot(
@@ -204,7 +204,7 @@ with tab2:
 
 # TAB 3: WORKFORCE ANALYSIS
 with tab3:
-    st.header("Workforce Capabilities & Strategy")
+    st.header("Internal Equity Overview")
     
     df_viz = df.copy()
     
@@ -223,7 +223,7 @@ with tab3:
     
     st.pyplot(fig7)
 
-    st.subheader("Strategic Deep Dive")
+    st.subheader("Exploratory insights of current workforce")
     fig8, axes2 = plt.subplots(2, 2, figsize=(15, 12))
     
     sns.countplot(data=df_viz, x='Band', hue='Clean_Skill', palette='viridis', ax=axes2[0, 0])
@@ -303,8 +303,8 @@ with tab4:
 
 # TAB 5: TOOLS
 with tab5:
-    st.header("Tools & Calculators")
-    st.markdown("These tools are designed to make data-driven decisions.")
+    st.header("Tools")
+    st.markdown("These tools are designed to make data-driven decisions based on the anaylis drawn from uploaded file.")
 
     PPP_INR_RATE = 22.54 
 
@@ -363,7 +363,7 @@ with tab5:
             st.warning("Performance or Market data missing.")
 
     # Tool 3: Pay Equity Auditor
-    with st.expander("Individual Pay Equity Auditor"):
+    with st.expander("Individual Pay Equity Checker"):
         st.write("Check specific employee for internal/external equity.")
         
         emp_id = st.text_input("Enter Employee ID to Audit:")
