@@ -9,7 +9,7 @@ st.set_page_config(page_title="Rewards Managemenr: Group 13", layout="wide")
 st.title("Total Rewards & Workforce Analytics Dashboard")
 
 # --- 2. File Uploader ---
-st.sidebar.header("Data Upload")
+st.sidebar.header("Upload your files here")
 uploaded_file = st.sidebar.file_uploader("I**IMPORTANT:** Upload your file here, make sure the name of the file is **'data set'** and the format is **.xlsb**", type=['xlsb', 'xlsx'])
 
 # --- 3. Data Processing Function ---
@@ -99,12 +99,12 @@ def process_data(file):
 # --- 4. Main App Logic ---
 
 if uploaded_file is None:
-    st.info("Please upload a file to begin analysis.")
+    st.info("↖️ Please open the sidebar and upload a file to begin analysis.")
     st.stop()
 
 try:
     df = process_data(uploaded_file)
-    st.success("Data processed successfully!")
+    st.success("Data Processed Successfully!")
 except Exception as e:
     st.error(f"Error processing file: {e}")
     st.stop()
