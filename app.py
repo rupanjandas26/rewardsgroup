@@ -132,9 +132,9 @@ if uploaded_file is not None:
 
     # === TAB 2: MARKET POSITIONING ===
     with tab2:
-        st.header("Market Positioning Analysis")
+        st.header("Oveview of Wipro's Market Positioning Analysis")
         
-        st.subheader("1. Overall Market Positioning (Compa-Ratio)")
+        st.subheader("Overall Market Positioning (Compa-Ratio)")
         fig, ax = plt.subplots(figsize=(10, 4))
         sns.histplot(data=df, x='Compa_Ratio', kde=True, bins=100, color='teal', ax=ax)
         ax.axvline(1.0, color='red', linestyle='--', linewidth=2, label='Market Median (1.0)')
@@ -144,7 +144,7 @@ if uploaded_file is not None:
         ax.legend()
         st.pyplot(fig)
 
-        st.subheader("2. Market Strategy (Median Pay vs Market)")
+        st.subheader("Market Strategy (Median Pay vs Market)")
         market_strategy = df.groupby('Band')[['Compa_Ratio']].median().reset_index()
         market_strategy.rename(columns={'Compa_Ratio': 'Median_Compa_Ratio'}, inplace=True)
         
@@ -162,7 +162,7 @@ if uploaded_file is not None:
                 ax.text(x, y + 0.02, f'{y:.2f}', ha='center', fontweight='bold')
         st.pyplot(fig)
         
-        st.subheader("3. Individual Positioning (Outlier Check)")
+        st.subheader("Individual Positioning (Outlier Check)")
         fig, ax = plt.subplots(figsize=(12, 6))
         sns.scatterplot(data=df, x='Band', y='Compa_Ratio', hue='Positioning_Status', 
                         style='Positioning_Status', s=100, palette='viridis', ax=ax)
@@ -172,9 +172,9 @@ if uploaded_file is not None:
 
     # === TAB 3: PAY DRIVERS ===
     with tab3:
-        st.header("Phase 3: Internal Equity & Pay Drivers")
+        st.header("Overview of Wipro's Internal Equity & Pay Drivers")
         
-        st.subheader("1. Capabilities & Strategy Check")
+        st.subheader("Capabilities & Strategy Check")
         fig, axes = plt.subplots(2, 2, figsize=(20, 14))
         
         # Skill Mix
@@ -201,7 +201,7 @@ if uploaded_file is not None:
         st.pyplot(fig)
         
         st.markdown("---")
-        st.subheader("2. Deep Dive: Pay Correlations")
+        st.subheader("Pay Correlations Check")
         
         col_d1, col_d2 = st.columns(2)
         
@@ -224,7 +224,7 @@ if uploaded_file is not None:
             st.pyplot(fig)
 
         st.markdown("---")
-        st.subheader("3. Pay Driver Heatmap")
+        st.subheader("Pay Driver Heatmap: Which factors determine Wipro's Pay Strategy?")
         
         df['Band_Code'] = df['Band'].cat.codes
         cols_analyze = ['Annual_TCC (PPP USD)', 'Clean_Experience', 'Clean_Tenure', 'Clean_Rating', 'Band_Code']
