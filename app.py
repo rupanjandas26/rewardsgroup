@@ -6,7 +6,7 @@ import numpy as np
 import os  # Added for persistent file handling
 
 # Page Config 
-st.set_page_config(page_title="Rewards Group 13", layout="wide")
+st.set_page_config(page_title="Group 13", layout="wide")
 st.title("Wipro Dashboard v1")
 
 # --- SIDEBAR ADDITIONS ---
