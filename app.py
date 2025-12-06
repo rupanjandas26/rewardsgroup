@@ -8,12 +8,12 @@ import numpy as np
 st.set_page_config(page_title="Wipro Workforce Rewards Analysis", layout="wide")
 
 # Title and Introduction
-st.title("📊 Workforce Rewards & Equity Analysis")
-st.markdown("This dashboard analyzes Pay Ranges, Market Positioning, and Internal Equity drivers.")
+st.title("Wipro Analysis: Group 13")
+st.markdown("Version 1 of Wipro Worksforce Dashboard: contains insights on Wipro's Market Positioning and Internal Equity Drivers")
 
 # --- SIDEBAR: SETTINGS & FILE UPLOAD ---
 st.sidebar.header("Configuration")
-uploaded_file = st.sidebar.file_uploader("Upload your 'data set.xlsb' file", type=['xlsb', 'xlsx'])
+uploaded_file = st.sidebar.file_uploader("Upload your 'data set.xlsb' file. Please make sure that you rename the file as 'data set' otherwise this won't work", type=['xlsb', 'xlsx'])
 
 if uploaded_file is not None:
     # --- 1. DATA LOADING & PREPROCESSING ---
@@ -104,7 +104,7 @@ if uploaded_file is not None:
     st.success("Data successfully loaded!")
 
     # --- TABS FOR ANALYSIS ---
-    tab1, tab2, tab3 = st.tabs(["Phase 1: Overview", "Phase 2: Market Positioning", "Phase 3: Pay Drivers"])
+    tab1, tab2, tab3 = st.tabs(["Overview", "Market Positioning", "Pay Drivers"])
 
     # === TAB 1: OVERVIEW ===
     with tab1:
