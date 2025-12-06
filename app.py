@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Rewards Management: Group 13", layout="wide")
-st.title("Total Rewards & Workforce Analytics Dashboard")
+st.set_page_config(page_title="Rewards: Group 13", layout="wide")
+st.title("Wipro Master Dashboard. ")
 
 # --- 2. File Uploader ---
 st.sidebar.header("Upload your files here")
@@ -290,15 +290,19 @@ with tab4:
         )
         st.pyplot(fig12)
 
-# === TAB 5: TOOLS (NEW CODE HERE) ===
-# This entire section is new and contains the calculator you requested
+# === TAB 5: TOOLS (UPDATED WITH INR VALUES) ===
 with tab5:
-    st.header("HR Action Tools & Calculators")
-    st.markdown("These tools are designed for Recruiters and HR Managers to make data-driven decisions.")
+    st.header("Tools & Calculators")
+    st.markdown("These tools are designed to make data-driven decisions.")
+
+    # Define the PPP Conversion rate for display (Derived from your code: 1 USD = 22.54 INR in PPP terms)
+    # We use PPP rate because your base metrics are in PPP USD. 
+    # Using the market rate (84) on PPP data would result in inflated INR values.
+    PPP_INR_RATE = 22.54 
 
     # --- Tool 1: Recruitment Salary Fitment Calculator ---
-    with st.expander("🛠️ Tool 1: Recruitment Salary Fitment Calculator", expanded=True):
-        st.write("Use this tool to determine the appropriate offer range for a new hire based on internal benchmarks.")
+    with st.expander("Recruitment Salary Fitment Calculator", expanded=True):
+        st.write("Use this tool to determine the appropriate offer range for a new hire.")
         
         # 1. Create Input Columns
         calc_col1, calc_col2 = st.columns(2)
@@ -317,32 +321,36 @@ with tab5:
             # 3. Filter the dataframe to only get employees in the selected Band
             band_data = df[df['Band'] == c_band]
             
-            # 4. Calculate Statistics (25th percentile, Median/50th, 75th percentile)
-            # We use the PPP USD column for standardized comparison
+            # 4. Calculate Statistics (PPP USD)
             stats = band_data['Annual_TCC (PPP USD)'].describe()
             p25 = stats['25%']
             p50 = stats['50%']
             p75 = stats['75%']
             
-            # 5. Display the Numbers
-            st.markdown(f"### Market Data for Band: {c_band}")
+            # 5. Display the Numbers (Dual Currency)
+            st.markdown(f"### Market Benchmarks for Band: {c_band}")
             
             metric_col1, metric_col2, metric_col3 = st.columns(3)
-            metric_col1.metric("Low End (25th %)", f"${p25:,.0f}")
-            metric_col2.metric("Median (50th %)", f"${p50:,.0f}")
-            metric_col3.metric("High End (75th %)", f"${p75:,.0f}")
+            
+            # Helper to format string
+            def fmt_currency(usd_val):
+                inr_val = usd_val * PPP_INR_RATE
+                return f"${usd_val:,.0f} / ₹{inr_val:,.0f}"
+
+            metric_col1.metric("Low End (25th %)", fmt_currency(p25))
+            metric_col2.metric("Median (50th %)", fmt_currency(p50))
+            metric_col3.metric("High End (75th %)", fmt_currency(p75))
             
             # 6. Recommendation Logic
-            # If candidate is very experienced (> 5 years), suggest higher end of range
             st.markdown("#### 💡 AI Recommendation:")
             if c_exp > 5:
-                st.success(f"Candidate is experienced ({c_exp} years). \n\n**Recommendation:** Offer between Median and 75th percentile (**${p50:,.0f} - ${p75:,.0f}**).")
+                st.success(f"Candidate is experienced ({c_exp} years). \n\n**Target Offer:** {fmt_currency(p50)} - {fmt_currency(p75)}")
             else:
-                st.info(f"Candidate is junior/mid-level ({c_exp} years). \n\n**Recommendation:** Offer between 25th percentile and Median (**${p25:,.0f} - ${p50:,.0f}**).")
+                st.info(f"Candidate is junior/mid-level ({c_exp} years). \n\n**Target Offer:** {fmt_currency(p25)} - {fmt_currency(p50)}")
 
     # --- Tool 2: Flight Risk Detector ---
-    with st.expander("🚨 Tool 2: Flight Risk Detector (Inequity Scanner)"):
-        st.write("Identify high performers who are underpaid (Flight Risks).")
+    with st.expander("Flight Risk Detector for current exployees"):
+        st.write("Enter the Employee ID to get a report")
         
         # Logic: High Performance (> 4) AND Low Compa-Ratio (< 0.8)
         if 'Performance_Rating' in df.columns and 'Compa_Ratio' in df.columns:
@@ -357,19 +365,22 @@ with tab5:
             st.warning("Performance or Market data missing.")
 
     # --- Tool 3: Pay Equity Auditor ---
-    with st.expander("⚖️ Tool 3: Individual Pay Equity Auditor"):
+    with st.expander("Individual Pay Equity Auditor"):
         st.write("Check specific employee for internal/external equity.")
         
         emp_id = st.text_input("Enter Employee ID to Audit:")
         
         if emp_id:
-            # Check if ID exists (assuming ID is string or int, try to match)
+            # Check if ID exists
             record = df[df['ID'].astype(str) == str(emp_id)]
             
             if not record.empty:
                 r = record.iloc[0]
+                usd_pay = r['Annual_TCC (PPP USD)']
+                inr_pay = usd_pay * PPP_INR_RATE
+                
                 col1, col2 = st.columns(2)
-                col1.metric("Current Pay (PPP)", f"${r['Annual_TCC (PPP USD)']:,.0f}")
+                col1.metric("Current Pay (PPP Adjusted)", f"${usd_pay:,.0f} / ₹{inr_pay:,.0f}")
                 col2.metric("Compa-Ratio", f"{r['Compa_Ratio']:.2f}")
                 
                 if r['Compa_Ratio'] < 0.8:
