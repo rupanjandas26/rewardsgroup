@@ -8,12 +8,14 @@ import numpy as np
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
 st.title("Wipro Dashboard")
 
-# File Uploader 
 st.sidebar.header("Upload your files here")
 uploaded_file = st.sidebar.file_uploader(
-    "**IMPORTANT:** Make sure the name of the file is **'data set'** and the format is **.xlsb**", 
+    "Upload your data file (.xlsb or .xlsx)", 
     type=['xlsb', 'xlsx']
 )
+
+if uploaded_file is not None:
+    uploaded_file.name = 'data set.xlsb'
 
 # Data Processing Function
 @st.cache_data
