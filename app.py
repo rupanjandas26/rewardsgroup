@@ -244,5 +244,5 @@ if uploaded_file is not None:
         st.pyplot(fig)
 
 else:
-    st.info("👈 Please upload your **data set.xlsb** file in the sidebar to start the analysis.")
+    st.info("👈 Please **upload** your file in the sidebar to start the analysis.")
 
