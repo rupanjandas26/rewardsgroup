@@ -7,61 +7,6 @@ import numpy as np
 # Page Config 
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
 
-# Custom CSS for Wipro Blue Theme
-st.markdown("""
-    <style>
-    /* Main Background and Text */
-    .stApp {
-        background-color: #F0F4F8;
-    }
-    h1, h2, h3 {
-        color: #002561 !important; /* Wipro Dark Blue */
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E0E0E0;
-    }
-    
-    /* Buttons */
-    .stButton>button {
-        background-color: #005587; /* Wipro Secondary Blue */
-        color: white;
-        border-radius: 5px;
-        border: none;
-    }
-    .stButton>button:hover {
-        background-color: #002561;
-        color: white;
-    }
-
-    /* Metrics */
-    [data-testid="stMetricValue"] {
-        color: #005587 !important;
-    }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #E8F0FE;
-        border-radius: 4px 4px 0px 0px;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        color: #002561;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #005587 !important;
-        color: white !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("Wipro Dashboard")
 
 # File Uploader 
