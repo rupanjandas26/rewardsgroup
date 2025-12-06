@@ -7,7 +7,7 @@ import os  # Added for persistent file handling
 
 # Page Config 
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
-st.title("Wipro Dashboard of Rewards Management Group 13 v1")
+st.title("Wipro Dashboard v1")
 
 # --- SIDEBAR ADDITIONS ---
 st.sidebar.header("Hi!")
