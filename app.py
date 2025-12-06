@@ -9,10 +9,10 @@ st.set_page_config(page_title="Wipro Workforce Rewards Analysis", layout="wide")
 
 # Title and Introduction
 st.title("Wipro Analysis: Group 13")
-st.markdown("Version 1 of Wipro Worksforce Dashboard: This contains insights on Wipro's Market Positioning and Internal Equity Drivers")
+st.markdown("Version 1 of Wipro Worksforce Dashboard: This contains insights on Wipro's Market Positioning and Internal Equity Drivers. Please note that all currency figures is denoted by USD")
 
 # --- SIDEBAR: SETTINGS & FILE UPLOAD ---
-st.sidebar.header("Configuration")
+st.sidebar.header("Upload")
 uploaded_file = st.sidebar.file_uploader("IMPORTANT: Please make sure that you rename the file as 'data set' otherwise this tool won't work", type=['xlsb', 'xlsx'])
 
 if uploaded_file is not None:
@@ -108,7 +108,7 @@ if uploaded_file is not None:
 
     # === TAB 1: OVERVIEW ===
     with tab1:
-        st.header("Workforce Overview")
+        st.header("Overview of Wipro's Workforce")
         col1, col2 = st.columns(2)
         
         with col1:
@@ -119,7 +119,7 @@ if uploaded_file is not None:
             st.pyplot(fig)
 
         with col2:
-            st.subheader("Pay Distribution")
+            st.subheader("Pay Distribution (PPP adjusted)")
             fig, ax = plt.subplots(figsize=(8, 4))
             sns.histplot(df['Annual_TCC (PPP USD)'], bins=50, kde=True, color='skyblue', ax=ax)
             ax.set_xlim(0, 250000)
