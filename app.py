@@ -9,7 +9,7 @@ st.set_page_config(page_title="Wipro Workforce Rewards Analysis", layout="wide")
 
 # Title and Introduction
 st.title("Wipro Analysis: Group 13")
-st.markdown("Version 1 of Wipro Worksforce Dashboard: contains insights on Wipro's Market Positioning and Internal Equity Drivers")
+st.markdown("Version 1 of Wipro Worksforce Dashboard: This contains insights on Wipro's Market Positioning and Internal Equity Drivers")
 
 # --- SIDEBAR: SETTINGS & FILE UPLOAD ---
 st.sidebar.header("Configuration")
@@ -119,7 +119,7 @@ if uploaded_file is not None:
             st.pyplot(fig)
 
         with col2:
-            st.subheader("Pay Distribution (PPP USD)")
+            st.subheader("Pay Distribution")
             fig, ax = plt.subplots(figsize=(8, 4))
             sns.histplot(df['Annual_TCC (PPP USD)'], bins=50, kde=True, color='skyblue', ax=ax)
             ax.set_xlim(0, 250000)
