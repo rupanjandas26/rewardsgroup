@@ -99,7 +99,7 @@ def process_data(file):
 # --- 4. Main App Logic ---
 
 if uploaded_file is None:
-    st.info("↖️ Please open the sidebar and upload a file to begin analysis.")
+    st.info("⬅️ Please use the sidebar and upload the appropriate file to begin analysis.")
     st.stop()
 
 try:
