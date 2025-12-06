@@ -6,7 +6,6 @@ import numpy as np
 
 # Page Config 
 st.set_page_config(page_title="Rewards Group 13", layout="wide")
-
 st.title("Wipro Dashboard")
 
 # File Uploader 
@@ -147,7 +146,7 @@ with tab1:
     with col1:
         st.subheader("Pay Ranges by Job Band")
         fig1, ax1 = plt.subplots(figsize=(10, 5))
-        sns.boxplot(x='Band', y='Annual_TCC (PPP USD)', data=df, ax=ax1, palette='Blues')
+        sns.boxplot(x='Band', y='Annual_TCC (PPP USD)', data=df, ax=ax1)
         plt.title('Pay Ranges by Job Band (USD)')
         ax1.set_xlabel("Job Band")
         ax1.set_ylabel("Annual TCC (PPP USD)")
@@ -156,7 +155,7 @@ with tab1:
     with col2:
         st.subheader("Headcount by Band")
         fig2, ax2 = plt.subplots(figsize=(10, 5))
-        sns.countplot(x='Band', data=df, palette='Blues_r', ax=ax2)
+        sns.countplot(x='Band', data=df, palette='viridis', ax=ax2)
         plt.title('Headcount by Job Band')
         ax2.set_xlabel("Job Band")
         ax2.set_ylabel("Number of Employees")
@@ -164,7 +163,7 @@ with tab1:
 
     st.subheader("Distribution of Annual Pay")
     fig3, ax3 = plt.subplots(figsize=(10, 3))
-    sns.histplot(df['Annual_TCC (PPP USD)'], bins=100, kde=True, color='#005587', ax=ax3)
+    sns.histplot(df['Annual_TCC (PPP USD)'], bins=100, kde=True, color='skyblue', ax=ax3)
     plt.xlim(0, 250000)
     ax3.set_xlabel("Annual TCC (PPP USD)")
     ax3.set_ylabel("Frequency")
@@ -177,7 +176,7 @@ with tab2:
     if 'Compa_Ratio' in df.columns:
         st.subheader("Overall Market Positioning")
         fig4, ax4 = plt.subplots(figsize=(10, 3))
-        sns.histplot(data=df, x='Compa_Ratio', kde=True, bins=100, color='#005587', ax=ax4)
+        sns.histplot(data=df, x='Compa_Ratio', kde=True, bins=100, color='teal', ax=ax4)
         ax4.axvline(1.0, color='red', linestyle='--', linewidth=2, label='Market Median (1.0)')
         ax4.axvline(0.8, color='orange', linestyle=':', linewidth=2, label='Market Thresholds')
         ax4.axvline(1.2, color='orange', linestyle=':', linewidth=2)
@@ -189,7 +188,7 @@ with tab2:
         fig5, ax5 = plt.subplots(figsize=(10, 4))
         sns.scatterplot(
             data=df, x='Band', y='Compa_Ratio', hue='Positioning_Status',
-            style='Positioning_Status', s=100, palette='Blues', ax=ax5
+            style='Positioning_Status', s=100, palette='viridis', ax=ax5
         )
         ax5.axhline(1.0, color='red', linestyle='--', alpha=0.5)
         ax5.legend(bbox_to_anchor=(1.05, 1), loc='upper left', title="Market Position Category")
@@ -201,7 +200,7 @@ with tab2:
         fig6, ax6 = plt.subplots(figsize=(12, 6))
         sns.lineplot(
             data=market_strategy, x='Band', y='Compa_Ratio', marker='o',
-            markersize=10, linewidth=2.5, color='#002561', label='Wipro Median Pay', ax=ax6
+            markersize=10, linewidth=2.5, color='darkblue', label='Wipro Median Pay', ax=ax6
         )
         ax6.axhline(1.0, color='red', linestyle='--', linewidth=2, label='Market Median (1.0)')
         ax6.fill_between(market_strategy['Band'], 0.95, 1.05, color='green', alpha=0.1, label='Competitive Zone (95-105%)')
@@ -222,7 +221,7 @@ with tab3:
     fig7, axes = plt.subplots(1, 3, figsize=(20, 6))
     
     if 'Clean_Skill' in df_viz.columns:
-        sns.countplot(data=df_viz, x='Clean_Skill', palette='Blues', ax=axes[0])
+        sns.countplot(data=df_viz, x='Clean_Skill', palette='viridis', ax=axes[0])
         axes[0].tick_params(axis='x', rotation=45)
         axes[0].set_xlabel("Skill Category")
         axes[0].set_ylabel("Headcount")
@@ -232,7 +231,7 @@ with tab3:
         axes[1].set_xlabel("Performance Rating")
     
     if 'Clean_Tenure' in df_viz.columns:
-        sns.histplot(data=df_viz, x='Clean_Tenure', bins=20, kde=True, color='#005587', ax=axes[2])
+        sns.histplot(data=df_viz, x='Clean_Tenure', bins=20, kde=True, color='teal', ax=axes[2])
         axes[2].set_xlabel("Tenure (Years)")
     
     st.pyplot(fig7)
@@ -240,7 +239,7 @@ with tab3:
     st.subheader("Strategic Deep Dive")
     fig8, axes2 = plt.subplots(2, 2, figsize=(15, 12))
     
-    sns.countplot(data=df_viz, x='Band', hue='Clean_Skill', palette='Blues', ax=axes2[0, 0])
+    sns.countplot(data=df_viz, x='Band', hue='Clean_Skill', palette='viridis', ax=axes2[0, 0])
     axes2[0, 0].set_title('Skill Mix by Band')
     axes2[0, 0].legend(title='Skill Level', loc='upper right')
     
@@ -257,7 +256,7 @@ with tab3:
         cols_to_plot = [c for c in ['Outside Hire (Buy)', 'Home Grown (Build)'] if c in hiring_strategy.columns]
         if cols_to_plot:
             hiring_strategy = hiring_strategy[cols_to_plot]
-            hiring_strategy.plot(kind='bar', stacked=True, color=['#d73027', '#005587'], width=0.8, ax=axes2[1, 1])
+            hiring_strategy.plot(kind='bar', stacked=True, color=['#d73027', '#4575b4'], width=0.8, ax=axes2[1, 1])
             axes2[1, 1].set_title('Build vs Buy Ratio')
             axes2[1, 1].legend(title='Hiring Source', bbox_to_anchor=(1.05, 1), loc='upper left')
     
@@ -284,7 +283,7 @@ with tab4:
         if 'Clean_Experience' in df.columns:
             fig10, ax10 = plt.subplots(figsize=(10, 4))
             sns.scatterplot(data=df, x='Clean_Experience', y='Annual_TCC (PPP USD)', 
-                            hue='Band', palette='Blues', alpha=0.6, ax=ax10)
+                            hue='Band', palette='coolwarm', alpha=0.6, ax=ax10)
             ax10.legend(title='Job Band', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             st.pyplot(fig10)
@@ -293,7 +292,7 @@ with tab4:
     if 'Gender' in df.columns:
         df['Clean_Gender'] = df['Gender'].astype(str).str.upper().str.strip()
         fig11, ax11 = plt.subplots(figsize=(12, 4))
-        sns.boxplot(data=df, x='Band', y='Annual_TCC (PPP USD)', hue='Clean_Gender', palette='Pastel1', ax=ax11)
+        sns.boxplot(data=df, x='Band', y='Annual_TCC (PPP USD)', hue='Clean_Gender', palette='pastel', ax=ax11)
         ax11.legend(title='Gender', loc='upper right')
         st.pyplot(fig11)
 
