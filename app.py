@@ -9,7 +9,7 @@ st.set_page_config(page_title="Rewards Group 13", layout="wide")
 st.title("Wipro Dashboard of Rewards Management Group 13 v1")
 
 # --- SIDEBAR ADDITIONS ---
-st.sidebar.header("UPLOAD")
+st.sidebar.header("Hi!")
 uploaded_file = st.sidebar.file_uploader(
     "Please upload the Wipro File here (.xlsb or .xlsx)", 
     type=['xlsb', 'xlsx']
@@ -24,13 +24,13 @@ if 'visit_count' not in st.session_state:
 st.session_state.visit_count += 1
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Site Metrics")
-st.sidebar.metric("Session Interactions", st.session_state.visit_count)
+st.sidebar.subheader("Thanks for Visiting!")
+st.sidebar.metric("Page Visits", st.session_state.visit_count)
 
 # Contact Box
 st.sidebar.markdown("---")
-st.sidebar.subheader("📬 Contact Us")
-st.sidebar.info("For queries, please reach out to:\n\n**Email:** group13@tiss.edu")
+st.sidebar.subheader("Contact Us")
+st.sidebar.info("For queries, please reach out to Rewards Management: Group 13")
 
 # --- END SIDEBAR ADDITIONS ---
 
