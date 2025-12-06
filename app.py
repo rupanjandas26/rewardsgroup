@@ -5,12 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Rewards Managemenr: Group 13", layout="wide")
+st.set_page_config(page_title="Rewards Management: Group 13", layout="wide")
 st.title("Total Rewards & Workforce Analytics Dashboard")
 
 # --- 2. File Uploader ---
 st.sidebar.header("Upload your files here")
-uploaded_file = st.sidebar.file_uploader("I**IMPORTANT:** Upload your file here, make sure the name of the file is **'data set'** and the format is **.xlsb**", type=['xlsb', 'xlsx'])
+uploaded_file = st.sidebar.file_uploader(
+    "**IMPORTANT:** Upload your file here, make sure the name of the file is **'data set'** and the format is **.xlsb**", 
+    type=['xlsb', 'xlsx']
+)
 
 # --- 3. Data Processing Function ---
 @st.cache_data
@@ -111,7 +114,8 @@ except Exception as e:
 
 # --- 5. Visualizations in Tabs ---
 
-tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Market Strategy", "Workforce Analysis", "Pay Drivers"])
+### NEW: I added "Tools & Calculators" to this list below so we have a 5th tab
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Market Strategy", "Workforce Analysis", "Pay Drivers", "Tools & Calculators"])
 
 # === TAB 1: OVERVIEW ===
 with tab1:
@@ -241,7 +245,7 @@ with tab4:
         if 'Performance_Rating' in df.columns:
             fig9, ax9 = plt.subplots(figsize=(10, 4))
             sns.regplot(data=df, x='Performance_Rating', y='Annual_TCC (PPP USD)', 
-                       scatter_kws={'alpha': 0.3, 'color': 'gray'}, line_kws={'color': 'red'}, ax=ax9)
+                        scatter_kws={'alpha': 0.3, 'color': 'gray'}, line_kws={'color': 'red'}, ax=ax9)
             st.pyplot(fig9)
             
     with col_d2:
@@ -249,7 +253,7 @@ with tab4:
         if 'Clean_Experience' in df.columns:
             fig10, ax10 = plt.subplots(figsize=(10, 4))
             sns.scatterplot(data=df, x='Clean_Experience', y='Annual_TCC (PPP USD)', 
-                           hue='Band', palette='coolwarm', alpha=0.6, ax=ax10)
+                            hue='Band', palette='coolwarm', alpha=0.6, ax=ax10)
             st.pyplot(fig10)
 
     st.subheader("Gender Pay Equity Check")
@@ -285,3 +289,94 @@ with tab4:
             annot=True, cmap='RdYlGn', vmin=-1, vmax=1, ax=ax12
         )
         st.pyplot(fig12)
+
+# === TAB 5: TOOLS (NEW CODE HERE) ===
+# This entire section is new and contains the calculator you requested
+with tab5:
+    st.header("HR Action Tools & Calculators")
+    st.markdown("These tools are designed for Recruiters and HR Managers to make data-driven decisions.")
+
+    # --- Tool 1: Recruitment Salary Fitment Calculator ---
+    with st.expander("🛠️ Tool 1: Recruitment Salary Fitment Calculator", expanded=True):
+        st.write("Use this tool to determine the appropriate offer range for a new hire based on internal benchmarks.")
+        
+        # 1. Create Input Columns
+        calc_col1, calc_col2 = st.columns(2)
+        
+        with calc_col1:
+            # Dropdown to select the Band (filters data)
+            c_band = st.selectbox("Select Candidate Job Band", options=df['Band'].unique())
+        
+        with calc_col2:
+            # Number input for experience (used for recommendation logic)
+            c_exp = st.number_input("Candidate Years of Experience", min_value=0.0, step=0.5)
+
+        # 2. Button to Trigger Calculation
+        if st.button("Calculate Recommended Offer"):
+            
+            # 3. Filter the dataframe to only get employees in the selected Band
+            band_data = df[df['Band'] == c_band]
+            
+            # 4. Calculate Statistics (25th percentile, Median/50th, 75th percentile)
+            # We use the PPP USD column for standardized comparison
+            stats = band_data['Annual_TCC (PPP USD)'].describe()
+            p25 = stats['25%']
+            p50 = stats['50%']
+            p75 = stats['75%']
+            
+            # 5. Display the Numbers
+            st.markdown(f"### Market Data for Band: {c_band}")
+            
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
+            metric_col1.metric("Low End (25th %)", f"${p25:,.0f}")
+            metric_col2.metric("Median (50th %)", f"${p50:,.0f}")
+            metric_col3.metric("High End (75th %)", f"${p75:,.0f}")
+            
+            # 6. Recommendation Logic
+            # If candidate is very experienced (> 5 years), suggest higher end of range
+            st.markdown("#### 💡 AI Recommendation:")
+            if c_exp > 5:
+                st.success(f"Candidate is experienced ({c_exp} years). \n\n**Recommendation:** Offer between Median and 75th percentile (**${p50:,.0f} - ${p75:,.0f}**).")
+            else:
+                st.info(f"Candidate is junior/mid-level ({c_exp} years). \n\n**Recommendation:** Offer between 25th percentile and Median (**${p25:,.0f} - ${p50:,.0f}**).")
+
+    # --- Tool 2: Flight Risk Detector ---
+    with st.expander("🚨 Tool 2: Flight Risk Detector (Inequity Scanner)"):
+        st.write("Identify high performers who are underpaid (Flight Risks).")
+        
+        # Logic: High Performance (> 4) AND Low Compa-Ratio (< 0.8)
+        if 'Performance_Rating' in df.columns and 'Compa_Ratio' in df.columns:
+            risk_df = df[
+                (df['Performance_Rating'] >= 4.0) & 
+                (df['Compa_Ratio'] < 0.85)
+            ][['ID', 'Band', 'Performance_Rating', 'Compa_Ratio', 'Annual_TCC (PPP USD)']]
+            
+            st.error(f"⚠️ Found {len(risk_df)} High-Risk Employees!")
+            st.dataframe(risk_df.sort_values(by='Performance_Rating', ascending=False))
+        else:
+            st.warning("Performance or Market data missing.")
+
+    # --- Tool 3: Pay Equity Auditor ---
+    with st.expander("⚖️ Tool 3: Individual Pay Equity Auditor"):
+        st.write("Check specific employee for internal/external equity.")
+        
+        emp_id = st.text_input("Enter Employee ID to Audit:")
+        
+        if emp_id:
+            # Check if ID exists (assuming ID is string or int, try to match)
+            record = df[df['ID'].astype(str) == str(emp_id)]
+            
+            if not record.empty:
+                r = record.iloc[0]
+                col1, col2 = st.columns(2)
+                col1.metric("Current Pay (PPP)", f"${r['Annual_TCC (PPP USD)']:,.0f}")
+                col2.metric("Compa-Ratio", f"{r['Compa_Ratio']:.2f}")
+                
+                if r['Compa_Ratio'] < 0.8:
+                    st.error("❌ Equity Alert: Employee is significantly underpaid compared to market.")
+                elif r['Compa_Ratio'] > 1.2:
+                    st.warning("⚠️ Equity Alert: Employee is paid significantly above market.")
+                else:
+                    st.success("✅ Employee pay is equitable.")
+            else:
+                st.error("Employee ID not found.")
