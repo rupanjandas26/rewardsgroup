@@ -5,13 +5,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Rewards Management: Group 13", layout="wide")
-st.title("Total Rewards & Workforce Analytics Dashboard")
+st.set_page_config(page_title="Rewards Group 13", layout="wide")
+st.title("Wipro Dashboard")
 
 # --- 2. File Uploader ---
 st.sidebar.header("Upload your files here")
 uploaded_file = st.sidebar.file_uploader(
-    "**IMPORTANT:** Upload your file here, make sure the name of the file is **'data set'** and the format is **.xlsb**", 
+    "**IMPORTANT:** Make sure the name of the file is **'data set'** and the format is **.xlsb**", 
     type=['xlsb', 'xlsx']
 )
 
@@ -144,7 +144,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Market Strategy", "Workforc
 
 # === TAB 1: OVERVIEW ===
 with tab1:
-    st.header("Overview: Pay Ranges & Distribution")
+    st.header("Overview: Pay Ranges & Distribution at Wipro")
     
     col1, col2 = st.columns(2)
     
@@ -317,14 +317,14 @@ with tab4:
 
 # === TAB 5: TOOLS (WITH INDIAN FORMATTING) ===
 with tab5:
-    st.header("HR Action Tools & Calculators")
-    st.markdown("These tools are designed for Recruiters and HR Managers to make data-driven decisions.")
+    st.header("Tools & Calculators")
+    st.markdown("These tools are designed to make data-driven decisions.")
 
     # Define the PPP Conversion rate for display (Derived from your code: 1 USD = 22.54 INR in PPP terms)
     PPP_INR_RATE = 22.54 
 
     # --- Tool 1: Recruitment Salary Fitment Calculator ---
-    with st.expander("🛠️ Tool 1: Recruitment Salary Fitment Calculator", expanded=True):
+    with st.expander("Recruitment Salary Fitment Calculator", expanded=True):
         st.write("Use this tool to determine the appropriate offer range for a new hire.")
         
         # 1. Create Input Columns
@@ -366,15 +366,15 @@ with tab5:
             metric_col3.metric("High End (75th %)", fmt_currency(p75))
             
             # 6. Recommendation Logic
-            st.markdown("#### 💡 AI Recommendation:")
+            st.markdown("#### Recommendation:")
             if c_exp > 5:
                 st.success(f"Candidate is experienced ({c_exp} years). \n\n**Target Offer:** {fmt_currency(p50)} - {fmt_currency(p75)}")
             else:
                 st.info(f"Candidate is junior/mid-level ({c_exp} years). \n\n**Target Offer:** {fmt_currency(p25)} - {fmt_currency(p50)}")
 
     # --- Tool 2: Flight Risk Detector ---
-    with st.expander("🚨 Tool 2: Flight Risk Detector (Inequity Scanner)"):
-        st.write("Identify high performers who are underpaid (Flight Risks).")
+    with st.expander("Flight Risk Detector"):
+        st.write("High performers who are underpaid")
         
         # Logic: High Performance (> 4) AND Low Compa-Ratio (< 0.8)
         if 'Performance_Rating' in df.columns and 'Compa_Ratio' in df.columns:
@@ -389,7 +389,7 @@ with tab5:
             st.warning("Performance or Market data missing.")
 
     # --- Tool 3: Pay Equity Auditor ---
-    with st.expander("⚖️ Tool 3: Individual Pay Equity Auditor"):
+    with st.expander("Individual Pay Equity Auditor"):
         st.write("Check specific employee for internal/external equity.")
         
         emp_id = st.text_input("Enter Employee ID to Audit:")
