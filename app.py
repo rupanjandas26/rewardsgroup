@@ -20,127 +20,122 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # 2. DATA PROCESSING ENGINE (The ETL Layer)
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# 2. DATA PROCESSING ENGINE (The ETL Layer) - FIXED
-# -----------------------------------------------------------------------------
 @st.cache_data
-def process_data(file):
+def load_and_clean_data(file):
     """
-    Robust Data Cleaning & Feature Engineering.
-    Handles Currency Conversion, Band Sorting, and Rating Aggregation.
+    Basic loading and cleaning. Complex mapping happens in the main app flow
+    to allow for user interaction if auto-detection fails.
     """
-    # Load Data
     try:
         df = pd.read_excel(file, engine='pyxlsb')
     except:
         df = pd.read_excel(file)
 
-    # 1. CLEAN COLUMN HEADERS (Strip spaces and handle underscores)
+    # Clean headers
     df.columns = df.columns.str.strip()
     
-    # Map common variations to the standard names we need
-    # This dictionary maps "Possible Bad Name" -> "Good Standard Name"
-    column_mapping = {
-        'Annual_TCC': 'Annual TCC',
-        'Annual Base Pay': 'Annual Base Pay', 
-        'Annual_Base_Pay': 'Annual Base Pay',
-        'Target_Incentive': 'Target Incentive',
-        'Annual TCC (PPP USD)': 'Annual TCC (PPP USD)', # In case it's already there
-        'Annual_TCC (PPP USD)': 'Annual TCC (PPP USD)'
-    }
-    df.rename(columns=column_mapping, inplace=True)
+    # 1. Handle Currency
+    # We try to auto-detect, otherwise default to USD
+    if 'Currency' in df.columns:
+        df['Currency'] = df['Currency'].astype(str).str.strip().str.upper()
+    else:
+        df['Currency'] = 'USD'
 
-    # --- A. CURRENCY CONVERSION (PPP Adjustment) ---
     ppp_factors = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16}
-    
-    if 'Currency' not in df.columns:
-        df['Currency'] = 'USD' # Default fallback
-    
     df['PPP_Factor'] = df['Currency'].map(ppp_factors).fillna(1.0)
-    
-    # List of columns to convert if they exist
-    pay_cols = ['Annual TCC', 'Annual Base Pay', 'Target Incentive', 'P50', 'P25', 'P75']
-    
-    for col in pay_cols:
-        # Check if the raw column exists (e.g., "Annual TCC")
-        if col in df.columns:
-            # Create the PPP version: "Annual TCC (PPP USD)"
-            new_col_name = f"{col} (PPP USD)"
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            df[new_col_name] = df[col] * df['PPP_Factor']
-            
-    # Final Check: Did we successfully create the main target column?
-    # If the file didn't have "Annual TCC" but had "Annual_TCC", the rename above fixed it.
-    # If it had NEITHER, we check for other likely candidates.
-    target_col = 'Annual TCC (PPP USD)'
-    
-    if target_col not in df.columns:
-        # Emergency Fallback: Look for ANY column that looks like Total Pay
-        possible_pay_cols = [c for c in df.columns if 'TCC' in c or 'Total Pay' in c]
-        if possible_pay_cols:
-            # Use the first one found
-            found_col = possible_pay_cols[0]
-            df[found_col] = pd.to_numeric(df[found_col], errors='coerce')
-            df[target_col] = df[found_col] * df['PPP_Factor']
 
-    # --- B. BAND HIERARCHY ---
+    # 2. Handle Band Hierarchy
     hierarchy = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2", "E"]
     if 'Band' in df.columns:
         df['Band'] = df['Band'].astype(str).str.strip()
-        df['Band'] = pd.Categorical(df['Band'], categories=hierarchy, ordered=True)
-    
-    # --- C. RATINGS ---
-    rating_cols = ['Rating_2022', 'Rating_2023', 'Rating_2024', 'Performance_Rating', 'Rating']
-    existing_rating_cols = [c for c in rating_cols if c in df.columns]
-    
-    if existing_rating_cols:
-        for col in existing_rating_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        df['Clean_Rating'] = df[existing_rating_cols].mean(axis=1)
-    else:
-        df['Clean_Rating'] = 3.0 
+        # Only keep categories that exist in the data to avoid empty category errors
+        actual_bands = [b for b in hierarchy if b in df['Band'].unique()]
+        df['Band'] = pd.Categorical(df['Band'], categories=actual_bands, ordered=True)
 
-    # --- D. EXPERIENCE & COMPA-RATIO ---
-    # Handle "Experience" vs "Tenure" vs "Years_Exp"
+    # 3. Handle Ratings (Auto-average if multiple columns found)
+    rating_cols = ['Rating_2022', 'Rating_2023', 'Rating_2024', 'Performance_Rating', 'Rating', 'Perf_Rating']
+    found_rating_cols = [c for c in rating_cols if c in df.columns]
+    
+    if found_rating_cols:
+        for col in found_rating_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['Clean_Rating'] = df[found_rating_cols].mean(axis=1)
+    else:
+        df['Clean_Rating'] = 3.0 # Default neutral
+
+    # 4. Handle Experience
+    # Try common names
     if 'Experience' in df.columns:
         df['Clean_Experience'] = pd.to_numeric(df['Experience'], errors='coerce')
     elif 'Tenure' in df.columns:
         df['Clean_Experience'] = pd.to_numeric(df['Tenure'], errors='coerce')
+    elif 'Years_Exp' in df.columns:
+        df['Clean_Experience'] = pd.to_numeric(df['Years_Exp'], errors='coerce')
     else:
         df['Clean_Experience'] = 0.0
-    
-    # Recalculate Compa-Ratio ensuring we use the PPP columns
-    p50_col = 'P50 (PPP USD)'
-    if p50_col in df.columns and target_col in df.columns:
-        df['Compa_Ratio'] = df[target_col] / df[p50_col]
-    else:
-        df['Compa_Ratio'] = 0.0
 
     return df
 
 # -----------------------------------------------------------------------------
-# 3. SIDEBAR & INITIALIZATION - UPDATED DEBUGGING
+# 3. SIDEBAR & INITIALIZATION
 # -----------------------------------------------------------------------------
 st.sidebar.header("Data Ingestion")
 uploaded_file = st.sidebar.file_uploader("Upload Wipro Database", type=['xlsb', 'xlsx'])
 
 if uploaded_file:
-    df = process_data(uploaded_file)
+    df = load_and_clean_data(uploaded_file)
     
+    # --- INTELLIGENT COLUMN MAPPING ---
+    # We define the target column name we WANT
     target_col = 'Annual TCC (PPP USD)'
     
-    # DEBUGGING CHECK
-    if target_col not in df.columns:
-        st.error(f"❌ Critical Error: Could not generate '{target_col}'.")
-        st.write("Columns found in your file:", df.columns.tolist())
-        st.stop()
+    # 1. Try to find the Pay column automatically
+    possible_pay_names = ['Annual TCC', 'Annual_TCC', 'Annual Base Pay', 'Total Pay', 'CTC', 'Fixed Pay']
+    found_pay_col = None
     
-    st.sidebar.success("Data Successfully Processed")
-    # ... (Rest of the code remains the same)
+    # Check exact matches first
+    for candidate in possible_pay_names:
+        if candidate in df.columns:
+            found_pay_col = candidate
+            break
+            
+    # 2. If not found, ASK THE USER
+    if found_pay_col is None:
+        st.sidebar.error("⚠️ Could not auto-detect Pay Column.")
+        st.sidebar.markdown("Please select the column that represents **Annual Pay**:")
+        found_pay_col = st.sidebar.selectbox("Select Pay Column", df.columns)
+    else:
+        st.sidebar.success(f"Mapped Pay Column: {found_pay_col}")
 
+    # 3. Create the Standardized Target Column
+    # Convert to numeric and apply PPP factor
+    df[found_pay_col] = pd.to_numeric(df[found_pay_col], errors='coerce')
+    df[target_col] = df[found_pay_col] * df['PPP_Factor']
+
+    # 4. Calculate Compa-Ratio (Optional but recommended)
+    if 'P50 (PPP USD)' not in df.columns:
+        # Try to find a P50/Market column to map
+        possible_mkt_names = ['P50', 'Market Median', 'Market P50']
+        found_mkt_col = None
+        for candidate in possible_mkt_names:
+            if candidate in df.columns:
+                found_mkt_col = candidate
+                break
+        
+        if found_mkt_col:
+            df['P50 (PPP USD)'] = pd.to_numeric(df[found_mkt_col], errors='coerce') * df['PPP_Factor']
+            df['Compa_Ratio'] = df[target_col] / df['P50 (PPP USD)']
+        else:
+            df['Compa_Ratio'] = 1.0 # Default if market data missing
+            
+    st.sidebar.markdown(f"**Records Loaded:** {len(df):,}")
+    
     # -------------------------------------------------------------------------
-    # TAB 1: DESCRIPTIVE (Brief Overview)
+    # MAIN APP TABS
     # -------------------------------------------------------------------------
+    tab1, tab2, tab3 = st.tabs(["1. Descriptive Diagnostics", "2. Statistical Rigor (OLS)", "3. Logic Engines"])
+
+    # --- TAB 1: DESCRIPTIVE ---
     with tab1:
         st.subheader("Diagnostic Overview")
         col1, col2, col3 = st.columns(3)
@@ -149,93 +144,58 @@ if uploaded_file:
         col3.metric("Avg Compa-Ratio", f"{df['Compa_Ratio'].mean():.2f}")
         
         st.markdown("### Pay vs Experience (Raw Data)")
-        st.caption("The 'Descriptive' view showing the raw correlation, colored by Job Band.")
-        
-        # Safe plot
         if 'Band' in df.columns:
             fig = px.scatter(df, x='Clean_Experience', y=target_col, color='Band', 
                              opacity=0.5, height=500, title="Scatter: Tenure vs Pay (by Band)")
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Band column missing for visualization.")
+            st.warning("Band column missing. Please ensure your file has a 'Band' column.")
 
-    # -------------------------------------------------------------------------
-    # TAB 2: STATISTICAL RIGOR (The Mincer Equation)
-    # -------------------------------------------------------------------------
+    # --- TAB 2: REGRESSION (MINCER EQUATION) ---
     with tab2:
         st.header("The 'Mincer Equation' Analysis")
-        st.markdown("""
-        To isolate the impact of Experience independent of Band, we run a **Multiple Linear Regression**.
-        This overcomes the 'Omitted Variable Bias' of simple correlation.
+        st.markdown("**Equation:** $$Pay = \\beta_0 + \\beta_1(Exp) + \\beta_2(Perf) + \\beta_3(Band)$$")
         
-        **Equation:** $$Pay = \\beta_0 + \\beta_1(Exp) + \\beta_2(Perf) + \\beta_3(Band)$$
-        """)
-        
-        
-
-        # 1. Prepare Data for Regression (Drop NaNs in relevant cols)
+        # Prepare Data
         reg_cols = [target_col, 'Clean_Experience', 'Clean_Rating', 'Band']
         
-        # Verify columns exist
         if all(c in df.columns for c in reg_cols):
             df_reg = df[reg_cols].dropna().copy()
-
-            # 2. Run OLS using Statsmodels (Formula API)
-            # Q() handles spaces in column names
+            
+            # Run OLS
             formula = f"Q('{target_col}') ~ Clean_Experience + Clean_Rating + C(Band)"
             model = smf.ols(formula=formula, data=df_reg).fit()
 
-            # 3. Display Results
+            # Display
             col_res1, col_res2 = st.columns(2)
-            
             with col_res1:
-                st.subheader("Model Key Metrics")
-                st.metric("R-Squared", f"{model.rsquared:.3f}", delta_color="normal", 
-                         help="Percentage of pay variation explained by the model")
-                st.metric("Adj. R-Squared", f"{model.rsquared_adj:.3f}")
-                st.metric("AIC (Model Fit)", f"{model.aic:,.0f}")
+                st.subheader("Key Drivers")
+                st.metric("R-Squared", f"{model.rsquared:.3f}")
                 
-                st.markdown("---")
-                st.markdown("**Coefficient Interpretation:**")
-                
-                # Extract Intercept & Exp Coefficient safely
                 params = model.params
                 intercept = params['Intercept']
                 exp_coef = params['Clean_Experience']
                 perf_coef = params['Clean_Rating']
                 
-                st.write(f"**Base Pay (Intercept):** ${intercept:,.2f}")
+                st.write(f"**Base Pay:** ${intercept:,.2f}")
                 st.write(f"**Value of 1 Year Exp:** ${exp_coef:,.2f}")
                 st.write(f"**Value of 1 Rating Point:** ${perf_coef:,.2f}")
-                
-                if perf_coef < 1000:
-                    st.warning("⚠️ Insight: Performance Pay Premium is low compared to Experience.")
 
             with col_res2:
-                st.subheader("Detailed Regression Summary")
-                st.caption("Full OLS output for Faculty Verification of Significance (P>|t|)")
-                # Convert summary to string and display as code for "Academic" look
                 st.text(model.summary().as_text())
 
-            # 4. Extract Coefficients for Logic B (Cache them in session state)
             st.session_state['reg_params'] = model.params
         else:
-            st.error(f"Missing columns for regression. Required: {reg_cols}")
+            st.error(f"Missing columns for regression. Ensure {reg_cols} exist.")
 
-    # -------------------------------------------------------------------------
-    # TAB 3: LOGIC-BASED DECISION TOOLS
-    # -------------------------------------------------------------------------
+    # --- TAB 3: LOGIC ENGINES ---
     with tab3:
         st.header("Algorithmic Decision Engines")
         
-        # --- LOGIC A: FLIGHT RISK PREDICTOR ---
-        st.subheader("Tool A: 'Critical Talent' Flight Risk Predictor")
-        st.info("Logic: Flags High Performers (Rating >= 4) with High Experience (> 3 Yrs) who are Underpaid (Compa < 0.85).")
+        # Logic A: Flight Risk
+        st.subheader("Tool A: Flight Risk Predictor")
         
-        
-
         if 'Compa_Ratio' in df.columns:
-            # The Boolean Mask (Logic Engine)
             risk_mask = (
                 (df['Compa_Ratio'] < 0.85) & 
                 (df['Clean_Rating'] >= 4.0) & 
@@ -244,71 +204,38 @@ if uploaded_file:
             flight_risk_df = df[risk_mask].copy()
             
             if not flight_risk_df.empty:
-                # Calculate Cost to Retain (Bring to P50)
-                # Cost = P50 - Current Pay
-                if 'P50 (PPP USD)' in df.columns:
-                    flight_risk_df['Retention_Cost'] = flight_risk_df['P50 (PPP USD)'] - flight_risk_df[target_col]
-                    total_risk_cost = flight_risk_df['Retention_Cost'].sum()
-                    
-                    c1, c2 = st.columns(2)
-                    c1.error(f"High Risk Employees Identified: {len(flight_risk_df)}")
-                    c2.metric("Total Budget to Stabilize (Retention Cost)", f"${total_risk_cost:,.0f}")
-                    
-                    st.markdown("**Target List for Immediate Intervention:**")
-                    st.dataframe(flight_risk_df[['ID', 'Band', 'Clean_Experience', 'Clean_Rating', 'Compa_Ratio', 'Retention_Cost']])
-                else:
-                     st.warning("P50 market data missing, cannot calculate retention cost.")
+                st.error(f"High Risk Employees: {len(flight_risk_df)}")
+                st.dataframe(flight_risk_df)
             else:
-                st.success("No critical flight risk employees identified based on current logic criteria.")
-        else:
-            st.warning("Compa-Ratio could not be calculated.")
+                st.success("No critical flight risks identified.")
         
         st.markdown("---")
-
-        # --- LOGIC B: NEW HIRE OFFER CALCULATOR ---
-        st.subheader("Tool B: Algorithmic Offer Calculator")
-        st.info("Uses the regression coefficients from Tab 2 to generate an Internal Equity-based offer.")
-
+        
+        # Logic B: Offer Calculator
+        st.subheader("Tool B: Offer Calculator")
+        
         if 'reg_params' in st.session_state:
             params = st.session_state['reg_params']
-            # Re-define hierarchy for the select box
-            hierarchy = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2", "E"]
             
-            # User Inputs
-            c_input1, c_input2 = st.columns(2)
-            input_exp = c_input1.number_input("Candidate Experience (Years)", 0.0, 40.0, 5.0)
-            input_band = c_input2.selectbox("Target Band", hierarchy)
+            # Input
+            c1, c2 = st.columns(2)
+            in_exp = c1.number_input("Experience (Years)", 0.0, 40.0, 5.0)
             
-            # The Calculator Logic
-            # Formula: Intercept + (Exp * Coef) + (Band_Premium)
+            # Get valid bands from data
+            valid_bands = df['Band'].unique().tolist()
+            in_band = c2.selectbox("Target Band", sorted([str(b) for b in valid_bands]))
             
-            # 1. Base Pay & Exp Premium
-            base_val = params['Intercept']
-            exp_val = params['Clean_Experience'] * input_exp
+            # Calculate
+            base = params['Intercept']
+            exp_val = params['Clean_Experience'] * in_exp
+            band_key = f"C(Band)[T.{in_band}]"
+            band_val = params.get(band_key, 0.0)
+            perf_val = params['Clean_Rating'] * 3.0 # Assume Avg rating
             
-            # 2. Band Premium
-            # Statsmodels formats categorical coefficients as C(Band)[T.BandName]
-            # The "Reference Category" (usually A1) will not have a key, so we default to 0
-            band_key = f"C(Band)[T.{input_band}]"
-            band_val = params.get(band_key, 0.0) 
+            total = base + exp_val + band_val + perf_val
             
-            # 3. Perf Premium (Assume '3' Average rating for new hire offer baseline)
-            perf_val = params['Clean_Rating'] * 3.0
-            
-            predicted_pay = base_val + exp_val + band_val + perf_val
-            
-            # Display Output
-            st.markdown(f"### Recommended Offer Range for {input_band} with {input_exp} Yrs Exp")
-            
-            col_off1, col_off2, col_off3 = st.columns(3)
-            col_off1.metric("Min Offer (-10%)", f"${predicted_pay * 0.9:,.0f}")
-            col_off2.metric("Target (Predicted)", f"${predicted_pay:,.0f}")
-            col_off3.metric("Max Offer (+10%)", f"${predicted_pay * 1.1:,.0f}")
-            
-            st.caption(f"Calculation Breakdown: Base (${base_val:,.0f}) + Exp Premium (${exp_val:,.0f}) + Band Premium (${band_val:,.0f}) + Avg Perf Adjustment (${perf_val:,.0f})")
-            
-        else:
-            st.warning("Please run the Regression in Tab 2 first to train the model coefficients.")
+            st.metric("Recommended Offer", f"${total:,.0f}")
+            st.caption(f"Range: ${total*0.9:,.0f} - ${total*1.1:,.0f}")
 
 else:
-    st.info("Awaiting Data Upload. Please use the sidebar to upload the Wipro Database (.xlsb or .xlsx).")
+    st.info("Awaiting Data Upload. Please use the sidebar to upload the Wipro Database.")
