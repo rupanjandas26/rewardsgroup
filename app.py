@@ -20,108 +20,123 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # 2. DATA PROCESSING ENGINE (The ETL Layer)
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 2. DATA PROCESSING ENGINE (The ETL Layer) - FIXED
+# -----------------------------------------------------------------------------
 @st.cache_data
 def process_data(file):
     """
     Robust Data Cleaning & Feature Engineering.
     Handles Currency Conversion, Band Sorting, and Rating Aggregation.
     """
-    # Load Data (Pyxlsb for binary excel support, Fallback to standard xlsx)
+    # Load Data
     try:
         df = pd.read_excel(file, engine='pyxlsb')
     except:
         df = pd.read_excel(file)
 
+    # 1. CLEAN COLUMN HEADERS (Strip spaces and handle underscores)
     df.columns = df.columns.str.strip()
+    
+    # Map common variations to the standard names we need
+    # This dictionary maps "Possible Bad Name" -> "Good Standard Name"
+    column_mapping = {
+        'Annual_TCC': 'Annual TCC',
+        'Annual Base Pay': 'Annual Base Pay', 
+        'Annual_Base_Pay': 'Annual Base Pay',
+        'Target_Incentive': 'Target Incentive',
+        'Annual TCC (PPP USD)': 'Annual TCC (PPP USD)', # In case it's already there
+        'Annual_TCC (PPP USD)': 'Annual TCC (PPP USD)'
+    }
+    df.rename(columns=column_mapping, inplace=True)
 
     # --- A. CURRENCY CONVERSION (PPP Adjustment) ---
-    # Nominal comparison is invalid. We use PPP factors (Approximate for 2025).
     ppp_factors = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16}
     
     if 'Currency' not in df.columns:
         df['Currency'] = 'USD' # Default fallback
     
-    # Calculate Factors
     df['PPP_Factor'] = df['Currency'].map(ppp_factors).fillna(1.0)
     
-    # Identify Pay Columns to convert
+    # List of columns to convert if they exist
     pay_cols = ['Annual TCC', 'Annual Base Pay', 'Target Incentive', 'P50', 'P25', 'P75']
     
     for col in pay_cols:
+        # Check if the raw column exists (e.g., "Annual TCC")
         if col in df.columns:
-            # Create a new column with (PPP USD) suffix
+            # Create the PPP version: "Annual TCC (PPP USD)"
             new_col_name = f"{col} (PPP USD)"
             df[col] = pd.to_numeric(df[col], errors='coerce')
             df[new_col_name] = df[col] * df['PPP_Factor']
             
-    # Standardize the main target variable name for the rest of the app
+    # Final Check: Did we successfully create the main target column?
+    # If the file didn't have "Annual TCC" but had "Annual_TCC", the rename above fixed it.
+    # If it had NEITHER, we check for other likely candidates.
     target_col = 'Annual TCC (PPP USD)'
-    if target_col not in df.columns and 'Annual TCC' in df.columns:
-         # If the loop above didn't catch it due to exact naming mismatch
-         df[target_col] = df['Annual TCC'] * df['PPP_Factor']
-
-    # --- B. FEATURE ENGINEERING: BAND HIERARCHY ---
-    # Explicit order is critical for Regression Reference Category
-    hierarchy = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2", "E"]
     
-    # Create Ordered Categorical Variable
+    if target_col not in df.columns:
+        # Emergency Fallback: Look for ANY column that looks like Total Pay
+        possible_pay_cols = [c for c in df.columns if 'TCC' in c or 'Total Pay' in c]
+        if possible_pay_cols:
+            # Use the first one found
+            found_col = possible_pay_cols[0]
+            df[found_col] = pd.to_numeric(df[found_col], errors='coerce')
+            df[target_col] = df[found_col] * df['PPP_Factor']
+
+    # --- B. BAND HIERARCHY ---
+    hierarchy = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2", "E"]
     if 'Band' in df.columns:
-        # Filter hierarchy to only include bands actually in the dataset to prevent categoricals errors
         df['Band'] = df['Band'].astype(str).str.strip()
         df['Band'] = pd.Categorical(df['Band'], categories=hierarchy, ordered=True)
     
-    # --- C. FEATURE ENGINEERING: RATINGS ---
-    # Average multiple years to get a stable "Performance" metric
-    rating_cols = ['Rating_2022', 'Rating_2023', 'Rating_2024', 'Performance_Rating']
-    
-    # Check which columns actually exist in the uploaded file
+    # --- C. RATINGS ---
+    rating_cols = ['Rating_2022', 'Rating_2023', 'Rating_2024', 'Performance_Rating', 'Rating']
     existing_rating_cols = [c for c in rating_cols if c in df.columns]
     
     if existing_rating_cols:
         for col in existing_rating_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-        # Create a clean average rating column
         df['Clean_Rating'] = df[existing_rating_cols].mean(axis=1)
     else:
-        df['Clean_Rating'] = 3.0 # Neutral default if missing to prevent crash
+        df['Clean_Rating'] = 3.0 
 
-    # --- D. FEATURE ENGINEERING: EXPERIENCE & COMPA-RATIO ---
+    # --- D. EXPERIENCE & COMPA-RATIO ---
+    # Handle "Experience" vs "Tenure" vs "Years_Exp"
     if 'Experience' in df.columns:
         df['Clean_Experience'] = pd.to_numeric(df['Experience'], errors='coerce')
+    elif 'Tenure' in df.columns:
+        df['Clean_Experience'] = pd.to_numeric(df['Tenure'], errors='coerce')
     else:
         df['Clean_Experience'] = 0.0
     
-    # Calculate Compa-Ratio (Internal Pay vs Market Median)
-    # Using the PPP Adjusted columns created above
+    # Recalculate Compa-Ratio ensuring we use the PPP columns
     p50_col = 'P50 (PPP USD)'
     if p50_col in df.columns and target_col in df.columns:
         df['Compa_Ratio'] = df[target_col] / df[p50_col]
     else:
-        df['Compa_Ratio'] = 0.0 # Default if market data missing
+        df['Compa_Ratio'] = 0.0
 
     return df
 
 # -----------------------------------------------------------------------------
-# 3. SIDEBAR & INITIALIZATION
+# 3. SIDEBAR & INITIALIZATION - UPDATED DEBUGGING
 # -----------------------------------------------------------------------------
 st.sidebar.header("Data Ingestion")
-uploaded_file = st.sidebar.file_uploader("Upload Wipro Database (.xlsb or .xlsx)", type=['xlsb', 'xlsx'])
+uploaded_file = st.sidebar.file_uploader("Upload Wipro Database", type=['xlsb', 'xlsx'])
 
 if uploaded_file:
     df = process_data(uploaded_file)
     
-    # Ensure naming consistency for regression
     target_col = 'Annual TCC (PPP USD)'
     
+    # DEBUGGING CHECK
     if target_col not in df.columns:
-        st.error(f"Critical Error: Could not generate '{target_col}'. Check input file headers.")
+        st.error(f"❌ Critical Error: Could not generate '{target_col}'.")
+        st.write("Columns found in your file:", df.columns.tolist())
         st.stop()
     
     st.sidebar.success("Data Successfully Processed")
-    st.sidebar.markdown(f"**Records:** {len(df):,}")
-    
-    # Tabs for Report Sections
-    tab1, tab2, tab3 = st.tabs(["1. Descriptive Diagnostics", "2. Statistical Rigor (OLS)", "3. Logic Engines"])
+    # ... (Rest of the code remains the same)
 
     # -------------------------------------------------------------------------
     # TAB 1: DESCRIPTIVE (Brief Overview)
