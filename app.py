@@ -1,279 +1,233 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import statsmodels.formula.api as smf
-import statsmodels.api as sm
 import numpy as np
+import statsmodels.formula.api as smf
+import plotly.express as px
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & STYLING
+# 1. APP CONFIGURATION
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="Wipro Rewards Analytics System", layout="wide")
+st.set_page_config(
+    page_title="Wipro Rewards Strategy Engine",
+    page_icon="📊",
+    layout="wide"
+)
 
-st.title("Wipro Rewards Analytics: Strategic Decision Engine")
+st.title("Wipro Rewards Strategy Engine")
 st.markdown("""
-**System Status:** Re-Engineered for Statistical Rigor (Mincer Equation).
-**Objective:** Optimize Compensation Strategy using Multiple Regression & Logic Engines.
-**Strategic Context:** Transition from 'Volume' (Tenure-based) to 'Value' (Performance-based) models.
+**System Focus:** Predictive Analytics & Logic-Based Decision Support.
+**Methodology:** Mincer Earnings Function (OLS Regression).
 """)
 
 # -----------------------------------------------------------------------------
-# 2. DATA PROCESSING ENGINE (The ETL Layer)
+# 2. DATA PIPELINE (ETL)
 # -----------------------------------------------------------------------------
 @st.cache_data
-def process_data(file):
+def load_and_clean_data(file):
     """
-    Robust Data Cleaning & Feature Engineering.
-    Handles Currency Conversion, Band Sorting, and Rating Aggregation.
+    Ingests raw Wipro HR data, normalizes currency to PPP, 
+    and prepares regression variables.
     """
-    # Load Data (Pyxlsb for binary excel support)
+    # Load Data (Support for both.xlsb and.xlsx)
     try:
         df = pd.read_excel(file, engine='pyxlsb')
     except:
-        df = pd.read_excel(file) # Fallback for xlsx
-
+        df = pd.read_excel(file)
+        
+    # Standardize Column Names (Strip whitespace)
     df.columns = df.columns.str.strip()
 
-    # --- A. CURRENCY CONVERSION (PPP Adjustment) ---
-    # Nominal comparison is invalid. We use PPP factors (Approximate for 2025).
-    ppp_factors = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16}
+    # --- A. CURRENCY NORMALIZATION (PPP Adjustment) ---
+    # Rates derived from internal project context
+    ppp_rates = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16}
     
-    if 'Currency' not in df.columns:
-        df['Currency'] = 'USD' # Default fallback
-    
-    # Calculate Factors
-    df['PPP_Factor'] = df['Currency'].map(ppp_factors).fillna(1.0)
-    
-    # Convert Pay Columns to PPP USD
-    pay_cols =
-    
-    for col in pay_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            df = df[col] * df['PPP_Factor']
-            
-    # For backward compatibility with the rest of the app, ensure main target is named cleanly
-    if 'Annual TCC (PPP USD)' not in df.columns and 'Annual_TCC (PPP USD)' not in df.columns:
-        # Fallback if specific naming varies
-        if 'Annual TCC' in df.columns:
-             df = df
-
-    # --- B. FEATURE ENGINEERING: BAND HIERARCHY ---
-    # Explicit order is critical for Regression Reference Category and Visuals
-    # Bands: A3 (Entry) -> D3 (Leadership)
-    hierarchy =
-    
-    # Create Ordered Categorical Variable
-    # We filter hierarchy to only include bands present in data to avoid errors
-    if 'Band' in df.columns:
-        present_bands =.unique()]
-        band_type = pd.CategoricalDtype(categories=hierarchy, ordered=True)
-        df = df.astype(band_type)
-    
-    # --- C. FEATURE ENGINEERING: RATINGS ---
-    # Average multiple years to get a stable "Performance" metric
-    rating_cols =
-    
-    # Ensure cols exist
-    existing_rating_cols = [c for c in rating_cols if c in df.columns]
-    
-    if existing_rating_cols:
-        for col in existing_rating_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        df = df[existing_rating_cols].mean(axis=1)
+    if 'Currency' in df.columns:
+        df['PPP_Factor'] = df['Currency'].map(ppp_rates).fillna(1.0)
     else:
-        df = 3.0 # Neutral default if missing
+        df['PPP_Factor'] = 1.0
+        
+    # Create Target Variable: Annual TCC (PPP USD)
+    if 'Annual TCC' in df.columns:
+        df = pd.to_numeric(df, errors='coerce') * df['PPP_Factor']
+    
+    # Create Market Benchmark: P50 (PPP USD)
+    if 'P50' in df.columns:
+        df['P50_PPP'] = pd.to_numeric(df['P50'], errors='coerce') * df['PPP_Factor']
+        # Calculate Compa-Ratio
+        df = df / df['P50_PPP']
 
-    # --- D. FEATURE ENGINEERING: EXPERIENCE & COMPA-RATIO ---
+    # --- B. HIERARCHY ENFORCEMENT ---
+    # Define strict band order for regression reference levels
+    band_order =
+    
+    if 'Band' in df.columns:
+        # Filter only bands that exist in the specific dataset to prevent errors
+        valid_bands =.unique()]
+        df = pd.Categorical(df, categories=valid_bands, ordered=True)
+
+    # --- C. PERFORMANCE METRIC AGGREGATION ---
+    # Average current and historical ratings to smooth out anomalies
+    rating_cols =
+    valid_rating_cols = [c for c in rating_cols if c in df.columns]
+    
+    if valid_rating_cols:
+        for col in valid_rating_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df = df[valid_rating_cols].mean(axis=1)
+    else:
+        df = 3.0 # Default fallback
+
+    # --- D. EXPERIENCE CLEANING ---
     if 'Experience' in df.columns:
         df['Clean_Experience'] = pd.to_numeric(df['Experience'], errors='coerce')
+
+    # --- E. COLUMN SELECTION ---
+    # Keep only relevant columns for analysis to optimize memory
+    keep_cols =
+    # Filter for columns that actually exist
+    final_cols = [c for c in keep_cols if c in df.columns]
     
-    # Calculate Compa-Ratio (Internal Pay vs Market Median)
-    # Using the PPP Adjusted columns created above
-    if 'P50 (PPP USD)' in df.columns and 'Annual TCC (PPP USD)' in df.columns:
-        df = df / df
-
-    return df
+    return df[final_cols].copy()
 
 # -----------------------------------------------------------------------------
-# 3. SIDEBAR & INITIALIZATION
+# 3. SIDEBAR & EXECUTION
 # -----------------------------------------------------------------------------
-st.sidebar.header("Data Ingestion")
-uploaded_file = st.sidebar.file_uploader("Upload Wipro Database (.xlsb)", type=['xlsb', 'xlsx'])
+st.sidebar.header("Data Upload")
+uploaded_file = st.sidebar.file_uploader("Upload Wipro Data (.xlsb)", type=['xlsb', 'xlsx'])
 
 if uploaded_file:
-    df = process_data(uploaded_file)
+    df = load_and_clean_data(uploaded_file)
+    st.sidebar.success(f"Loaded {len(df):,} records")
     
-    # Ensure naming consistency for regression
-    # Map 'Annual TCC (PPP USD)' to a standard name without spaces if needed, or use Q()
-    target_col = 'Annual TCC (PPP USD)'
-    
-    st.sidebar.success("Data Successfully Processed")
-    st.sidebar.markdown(f"**Records:** {len(df):,}")
-    
-    # Tabs for Report Sections
-    tab1, tab2, tab3 = st.tabs()
+    # Create Tabs
+    tab_reg, tab_tools = st.tabs()
 
-    # -------------------------------------------------------------------------
-    # TAB 1: DESCRIPTIVE (Brief Overview)
-    # -------------------------------------------------------------------------
-    with tab1:
-        st.subheader("Diagnostic Overview")
-        if target_col in df.columns:
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Avg Pay (PPP)", f"${df[target_col].mean():,.0f}")
-            col2.metric("Avg Experience", f"{df['Clean_Experience'].mean():.1f} Years")
+    # =========================================================================
+    # TAB 1: REGRESSION ANALYSIS (The Mincer Equation)
+    # =========================================================================
+    with tab_reg:
+        st.subheader("Statistical Validation: The Mincer Earnings Function")
+        st.markdown("Isolating the value of **Experience** while controlling for **Job Band** and **Performance**.")
+        
+        # 1. Run Regression
+        # Drop missing values only for the regression subset
+        reg_df = df.dropna(subset=)
+        
+        formula = "Annual_TCC_PPP ~ Clean_Experience + Avg_Rating + C(Band)"
+        model = smf.ols(formula=formula, data=reg_df).fit()
+        
+        # 2. Extract Key Metrics
+        r2 = model.rsquared
+        params = model.params
+        
+        # 3. Display Metrics
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Model Fit (R²)", f"{r2:.1%}", help="Explains X% of pay variation")
+        col2.metric("Base Pay (Intercept)", f"${params['Intercept']:,.0f}")
+        col3.metric("Exp Premium (per Year)", f"${params['Clean_Experience']:,.0f}")
+
+        # 4. Detailed Summary
+        st.markdown("### Regression Coefficients (The 'Price' of Attributes)")
+        
+        # Format coefficients into a clean dataframe for display
+        coef_data =
+        for name, value in params.items():
+            if "Band" in name:
+                readable_name = name.replace("C(Band)", "")
+                coef_data.append({"Factor": readable_name, "Premium ($)": value})
+            elif "Experience" in name:
+                coef_data.append({"Factor": "Years of Experience", "Premium ($)": value})
+            elif "Rating" in name:
+                coef_data.append({"Factor": "Performance Rating (1 pt)", "Premium ($)": value})
+        
+        coef_df = pd.DataFrame(coef_data).set_index("Factor")
+        st.dataframe(coef_df.style.format("${:,.0f}"), use_container_width=True)
+        
+        with st.expander("View Full Statistical Output (OLS Summary)"):
+            st.code(model.summary().as_text())
+            
+        # Store params for the Calculator
+        st.session_state['reg_params'] = params
+
+    # =========================================================================
+    # TAB 2: DECISION TOOLS (Logic Engines)
+    # =========================================================================
+    with tab_tools:
+        st.header("Logic-Based Decision Engines")
+        
+        col_tool_a, col_tool_b = st.columns(2)
+        
+        # --- TOOL A: FLIGHT RISK PREDICTOR ---
+        with col_tool_a:
+            st.subheader("🚨 Critical Talent Flight Risk")
+            st.info("Logic: High Performer (4+) & Experienced (>3yr) & Underpaid (<85% Market).")
+            
             if 'Compa_Ratio' in df.columns:
-                col3.metric("Avg Compa-Ratio", f"{df.mean():.2f}")
-            
-            st.markdown("### Pay vs Experience (Raw Data)")
-            st.caption("The 'Descriptive' view showing the raw correlation, colored by Job Band.")
-            fig = px.scatter(df, x='Clean_Experience', y=target_col, color='Band', 
-                             opacity=0.5, height=500)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.error(f"Target column {target_col} not found. Check data headers.")
-
-    # -------------------------------------------------------------------------
-    # TAB 2: STATISTICAL RIGOR (The Mincer Equation)
-    # -------------------------------------------------------------------------
-    with tab2:
-        st.header("The 'Mincer Equation' Analysis")
-        st.markdown("""
-        To isolate the impact of Experience independent of Band, we run a **Multiple Linear Regression**.
-        This overcomes the 'Omitted Variable Bias' of the previous draft.
-        
-        **Equation:** $$Pay = \\beta_0 + \\beta_1(Exp) + \\beta_2(Perf) + \\beta_3(Band)$$
-        """)
-
-        # 1. Prepare Data for Regression (Drop NaNs in relevant cols)
-        reg_cols =
-        
-        # Verify columns exist
-        if all(c in df.columns for c in reg_cols):
-            df_reg = df[reg_cols].dropna().copy()
-
-            # 2. Run OLS using Statsmodels (Formula API)
-            # Q() handles spaces in column names
-            formula = f"Q('{target_col}') ~ Clean_Experience + Performance_Rating + C(Band)"
-            model = smf.ols(formula=formula, data=df_reg).fit()
-
-            # 3. Display Results
-            col_res1, col_res2 = st.columns(2)
-            
-            with col_res1:
-                st.subheader("Model Key Metrics")
-                st.metric("R-Squared", f"{model.rsquared:.3f}", delta_color="normal", 
-                         help="Percentage of pay variation explained by the model")
-                st.metric("Adj. R-Squared", f"{model.rsquared_adj:.3f}")
-                st.metric("AIC (Model Fit)", f"{model.aic:,.0f}")
+                # Logic Engine A
+                risk_mask = (
+                    (df < 0.85) &
+                    (df >= 4.0) &
+                    (df['Clean_Experience'] > 3.0)
+                )
                 
-                st.markdown("---")
-                st.markdown("**Coefficient Interpretation:**")
+                risk_df = df[risk_mask].copy()
                 
-                # Extract Intercept & Exp Coefficient safely
-                params = model.params
-                intercept = params['Intercept']
-                exp_coef = params['Clean_Experience']
-                perf_coef = params
+                # Remediation Cost Logic
+                risk_df = risk_df['P50_PPP'] - risk_df
+                total_cost = risk_df.sum()
                 
-                st.write(f"**Base Pay (Intercept):** ${intercept:,.2f}")
-                st.write(f"**Value of 1 Year Exp:** ${exp_coef:,.2f}")
-                st.write(f"**Value of 1 Rating Point:** ${perf_coef:,.2f}")
+                st.metric("Total Retention Budget Needed", f"${total_cost:,.0f}")
+                st.warning(f"{len(risk_df)} High-Risk Employees Identified")
                 
-                if perf_coef < 1000:
-                    st.error("Warning: Performance Pay Premium is low!")
-
-            with col_res2:
-                st.subheader("Detailed Regression Summary")
-                st.caption("Full OLS output for Faculty Verification of Significance (P>|t|)")
-                # Convert summary to string and display as code for "Academic" look
-                st.code(model.summary().as_text(), language='text')
-
-            # 4. Extract Coefficients for Logic B (Cache them in session state)
-            st.session_state['reg_params'] = model.params
-        else:
-            st.error(f"Missing columns for regression. Required: {reg_cols}")
-
-    # -------------------------------------------------------------------------
-    # TAB 3: LOGIC-BASED DECISION TOOLS
-    # -------------------------------------------------------------------------
-    with tab3:
-        st.header("Algorithmic Decision Engines")
-        
-        # --- LOGIC A: FLIGHT RISK PREDICTOR ---
-        st.subheader("Tool A: 'Critical Talent' Flight Risk Predictor")
-        st.info("Logic: Flags High Performers (Rating >= 4) with High Experience (> 3 Yrs) who are Underpaid (Compa < 0.85).")
-        
-        if 'Compa_Ratio' in df.columns:
-            # The Boolean Mask (Logic Engine)
-            risk_mask = (
-                (df < 0.85) & 
-                (df >= 4.0) & 
-                (df['Clean_Experience'] > 3.0)
-            )
-            flight_risk_df = df[risk_mask].copy()
-            
-            # Calculate Cost to Retain (Bring to P50)
-            # Cost = P50 - Current Pay
-            if 'P50 (PPP USD)' in df.columns:
-                flight_risk_df = flight_risk_df - flight_risk_df[target_col]
-                total_risk_cost = flight_risk_df.sum()
-                
-                c1, c2 = st.columns(2)
-                c1.error(f"High Risk Employees Identified: {len(flight_risk_df)}")
-                c2.metric("Total Budget to Stabilize (Retention Cost)", f"${total_risk_cost:,.0f}")
-                
-                st.markdown("**Target List for Immediate Intervention:**")
-                st.dataframe(flight_risk_df])
+                st.dataframe(
+                    risk_df]
+                   .style.format({'Compa_Ratio': '{:.2f}', 'Cost_to_Retain': '${:,.0f}'}),
+                    height=300
+                )
             else:
-                 st.warning("P50 market data missing, cannot calculate retention cost.")
-        else:
-            st.warning("Compa-Ratio could not be calculated.")
-        
-        st.markdown("---")
+                st.error("Missing Market Data (P50) for Risk Analysis")
 
-        # --- LOGIC B: NEW HIRE OFFER CALCULATOR ---
-        st.subheader("Tool B: Algorithmic Offer Calculator")
-        st.info("Uses the regression coefficients from Tab 2 to generate an Internal Equity-based offer.")
-
-        if 'reg_params' in st.session_state:
-            params = st.session_state['reg_params']
-            hierarchy =
+        # --- TOOL B: NEW HIRE OFFER CALCULATOR ---
+        with col_tool_b:
+            st.subheader("💰 Algorithmic Offer Calculator")
+            st.info("Logic: Uses Regression Coefficients to ensure Internal Equity.")
             
-            # User Inputs
-            c_input1, c_input2 = st.columns(2)
-            input_exp = c_input1.number_input("Candidate Experience (Years)", 0.0, 40.0, 5.0)
-            input_band = c_input2.selectbox("Target Band", hierarchy)
-            
-            # The Calculator Logic
-            # Formula: Intercept + (Exp * Coef) + (Band_Premium)
-            # Band Premium is tricky because reference category is 0.0
-            
-            base_val = params['Intercept']
-            exp_val = params['Clean_Experience'] * input_exp
-            
-            # Look up Band Coefficient
-            # Statsmodels names them like "C(Band)"
-            # We need to construct the key dynamically
-            band_key = f"C(Band)"
-            band_val = params.get(band_key, 0.0) # Returns 0.0 if it's the reference band or not found
-            
-            predicted_pay = base_val + exp_val + band_val
-            
-            # Display Output
-            st.markdown(f"### Recommended Offer Range for {input_band} with {input_exp} Yrs Exp")
-            
-            col_off1, col_off2, col_off3 = st.columns(3)
-            col_off1.metric("Min Offer (-10%)", f"${predicted_pay * 0.9:,.0f}")
-            col_off2.metric("Target (Predicted)", f"${predicted_pay:,.0f}")
-            col_off3.metric("Max Offer (+10%)", f"${predicted_pay * 1.1:,.0f}")
-            
-            st.caption(f"Calculation: Base (${base_val:,.0f}) + Exp Premium (${exp_val:,.0f}) + Band Premium (${band_val:,.0f})")
-            
-        else:
-            st.warning("Please run the Regression in Tab 2 first to train the model coefficients.")
+            if 'reg_params' in st.session_state:
+                p = st.session_state['reg_params']
+                
+                # Inputs
+                bands =.unique()]
+                input_band = st.selectbox("Select Band", bands, index=2) # Default B1/B2
+                input_exp = st.number_input("Years of Experience", 0.0, 30.0, 5.0)
+                
+                # Logic Engine B: Math
+                # Pay = Intercept + (Exp * Coef) + (Band * Coef)
+                base = p['Intercept']
+                exp_val = p['Clean_Experience'] * input_exp
+                
+                # Handle Categorical Lookup safely
+                band_key = f"C(Band)"
+                band_val = p.get(band_key, 0.0) # 0.0 if reference category
+                
+                predicted_offer = base + exp_val + band_val
+                
+                # Output Visuals
+                st.markdown("### Recommended Offer Corridor")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Min (-10%)", f"${predicted_offer*0.9:,.0f}")
+                c2.metric("Target (Equity)", f"${predicted_offer:,.0f}")
+                c3.metric("Max (+10%)", f"${predicted_offer*1.1:,.0f}")
+                
+                # Logic Explanation
+                st.caption(f"""
+                **Math Breakdown:**
+                Base (${base:,.0f}) + 
+                Exp Premium (${exp_val:,.0f}) + 
+                Band Premium (${band_val:,.0f})
+                """)
+                
+            else:
+                st.warning("Please run the Regression analysis in the first tab to calibrate the model.")
 
 else:
-    st.info("Awaiting Data Upload. Please use the sidebar to upload the Wipro Database (.xlsb or.xlsx).")
-
+    st.info("👆 Please upload the Wipro data file to begin.")
