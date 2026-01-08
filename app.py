@@ -201,13 +201,13 @@ if uploaded_file:
                 
                 # B. Within High Perf: Split by Pay (Higher Pay = Stable, Lower Pay = Risk)
                 high_perf_clusters = high_perf_clusters.sort_values(by='Compa_Ratio', ascending=False)
-                labels[high_perf_clusters.iloc[0]['Cluster']] = "⭐ Stable Star (High Perf / High Pay)"
-                labels[high_perf_clusters.iloc[1]['Cluster']] = "🚨 Flight Risk (High Perf / Low Pay)"
+                labels[high_perf_clusters.iloc[0]['Cluster']] = "Stable Star (High Perf / High Pay)"
+                labels[high_perf_clusters.iloc[1]['Cluster']] = "Flight Risk (High Perf / Low Pay)"
                 
                 # C. Within Low Perf: Split by Pay (Higher Pay = Overpaid, Lower Pay = Core)
                 low_perf_clusters = low_perf_clusters.sort_values(by='Compa_Ratio', ascending=False)
-                labels[low_perf_clusters.iloc[0]['Cluster']] = "🔻 Overpaid (Low Perf / High Pay)"
-                labels[low_perf_clusters.iloc[1]['Cluster']] = "⚖️ Core Employee (Low Perf / Low Pay)"
+                labels[low_perf_clusters.iloc[0]['Cluster']] = "Overpaid (Low Perf / High Pay)"
+                labels[low_perf_clusters.iloc[1]['Cluster']] = "Core Employee (Low Perf / Low Pay)"
                 
                 # Map labels back to dataframe
                 df.loc[cluster_data.index, 'Cluster_Label'] = cluster_data['Cluster'].map(labels)
