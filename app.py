@@ -10,17 +10,12 @@ from sklearn.preprocessing import StandardScaler
 # 1. APP CONFIGURATION
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Wipro Rewards Analytics: Dual-Engine AI",
+    page_title="Wipro Rewards Dashboard v3: Group 13",
     page_icon="⚖️",
     layout="wide"
 )
 
-st.title("Wipro Rewards Analytics: Dual-Engine AI")
-st.markdown("""
-**System Architecture:**
-1.  **Econometric Engine (Mincer OLS):** Establishes the "Fair Price" of talent based on Market Rules.
-2.  **AI Engine (K-Means):** Automatically segments workforce into **Strategic Quadrants** (e.g., Flight Risks, Stable Stars).
-""")
+st.title("Rewards Management Project Dashboard: Group 13")
 
 # -----------------------------------------------------------------------------
 # 2. ROBUST DATA PIPELINE (ETL)
