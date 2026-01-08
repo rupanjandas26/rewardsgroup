@@ -213,15 +213,14 @@ if uploaded_file:
                 df.loc[cluster_data.index, 'Cluster_Label'] = cluster_data['Cluster'].map(labels)
                 
                 # 4. VISUALIZATION
-                st.markdown("### 🧬 The Strategic Talent Map")
                 plot_df = df.dropna(subset=['Cluster_Label']).copy()
                 
                 # Define specific colors
                 color_map = {
-                    "🚨 Flight Risk (High Perf / Low Pay)": "red",
-                    "⭐ Stable Star (High Perf / High Pay)": "green",
-                    "🔻 Overpaid (Low Perf / High Pay)": "orange",
-                    "⚖️ Core Employee (Low Perf / Low Pay)": "blue"
+                    "Flight Risk (High Perf / Low Pay)": "red",
+                    "Stable Star (High Perf / High Pay)": "green",
+                    "Overpaid (Low Perf / High Pay)": "orange",
+                    "Core Employee (Low Perf / Low Pay)": "blue"
                 }
 
                 fig_cluster = px.scatter(
