@@ -47,6 +47,7 @@ def load_and_process_data(file):
     target_col = 'Annual_TCC_PPP'
     
     if 'Annual_TCC (PPP USD)' in df.columns:
+        # Use existing pre-calculated column
         df[target_col] = pd.to_numeric(df, errors='coerce')
     elif 'Annual_TCC' in df.columns:
         # Fallback PPP Logic
@@ -59,7 +60,6 @@ def load_and_process_data(file):
         return None, "Critical Error: No Pay Column (Annual_TCC) found."
 
     # --- LOGIC 2: 3-YEAR PERFORMANCE AVERAGE ---
-    # We look for specific rating columns
     potential_rating_cols =
     existing_ratings = [c for c in potential_rating_cols if c in df.columns]
     
@@ -267,6 +267,7 @@ if uploaded_file:
                     p = st.session_state['reg_params']
                     
                     # Extract bands from params keys for dropdown
+                    # Clean up statsmodels naming "C(Band)" -> "B1"
                     bands =", "") for k in p.keys() if "Band" in k]
                     
                     if bands:
