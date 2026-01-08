@@ -17,18 +17,18 @@ st.set_page_config(
 
 st.title("Wipro Rewards Analytics: Strategic Decision Engine")
 st.markdown("""
-**System Status:** Advanced Analytics Mode.
-**Modules Active:** 1. **Mincer Regression:** For Fair Pay Prediction (Internal Equity).
-2. **K-Means Clustering:** For Talent Segmentation & Flight Risk Analysis.
+**System Status:** Automated Deep Research Mode.
+**Data Source:** Automatically utilizing pre-processed PPP & Metric columns (Post-Column Y).
 """)
 
 # -----------------------------------------------------------------------------
-# 2. DATA PROCESSING ENGINE
+# 2. AUTOMATED DATA ENGINE (Strictly using Pre-Calculated Columns)
 # -----------------------------------------------------------------------------
 @st.cache_data
-def load_data(file):
+def load_and_process_data(file):
     """
-    Robust loader that handles both Excel and CSV formats.
+    Loads data and automatically grabs the specific pre-calculated columns 
+    located after the 'Unnamed: 24' (Column Y) separator.
     """
     try:
         if file.name.endswith('.csv'):
@@ -39,272 +39,212 @@ def load_data(file):
         st.error(f"Error loading file: {e}")
         return pd.DataFrame()
 
-    # Clean Headers
+    # 1. Clean Headers
     df.columns = df.columns.str.strip()
-    return df
-
-def clean_and_prep_data(df, pay_col, band_col, exp_col, rating_col, mkt_col):
-    """
-    Prepares the data for ML models.
-    """
-    # Create working copy
-    data = df.copy()
     
-    # 1. Target Variable (Pay)
-    # Ensure it is numeric
-    data[pay_col] = pd.to_numeric(data[pay_col], errors='coerce')
-    # If the user selects a nominal column, we might need PPP. 
-    # For now, we assume the user maps the "PPP" column if available.
-    data['Target_Pay'] = data[pay_col]
-
-    # 2. Features
-    data['Experience'] = pd.to_numeric(data[exp_col], errors='coerce').fillna(0)
-    data['Rating'] = pd.to_numeric(data[rating_col], errors='coerce').fillna(3.0) # Default to avg
+    # 2. DEFINE EXACT COLUMN MAPPING (Based on your file structure)
+    # We prioritize the columns found after Column Y for accuracy
+    target_map = {
+        'Pay': 'Annual_TCC (PPP USD)',
+        'Market': 'P50 (PPP USD)',
+        'Rating': 'Performance_Rating',
+        'Compa': 'Compa_Ratio',
+        'Exp': 'Experience', # From earlier section
+        'Band': 'Band'       # From earlier section
+    }
     
-    # 3. Band (Categorical)
-    # Define standard hierarchy for ordering
+    # 3. VALIDATE CRITICAL COLUMNS EXIST
+    missing = [val for key, val in target_map.items() if val not in df.columns]
+    if missing:
+        st.error(f"CRITICAL ERROR: The following required columns are missing: {missing}")
+        st.info("Ensure you are uploading the 'my_edited_table' file with the calculated PPP columns.")
+        st.stop()
+
+    # 4. TYPE CONVERSION & CLEANING
+    # Strictly use the values provided in the file, do not re-calculate
+    df['Target_Pay'] = pd.to_numeric(df[target_map['Pay']], errors='coerce')
+    df['Market_Ref'] = pd.to_numeric(df[target_map['Market']], errors='coerce')
+    df['Experience_Clean'] = pd.to_numeric(df[target_map['Exp']], errors='coerce').fillna(0)
+    df['Rating_Clean'] = pd.to_numeric(df[target_map['Rating']], errors='coerce').fillna(3.0)
+    df['Calculated_Compa_Ratio'] = pd.to_numeric(df[target_map['Compa']], errors='coerce')
+    
+    # 5. BAND ORDERING
     hierarchy = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2", "E", "F", "AA", "TRB"]
-    data[band_col] = data[band_col].astype(str).str.strip()
-    # Keep only valid bands
-    valid_bands = [b for b in hierarchy if b in data[band_col].unique()]
-    # Add any bands found in data but not in hierarchy to the end (safety net)
-    extra_bands = [b for b in data[band_col].unique() if b not in hierarchy]
-    full_order = valid_bands + extra_bands
+    valid_bands = [b for b in hierarchy if b in df[target_map['Band']].unique()]
+    extra_bands = [b for b in df[target_map['Band']].unique() if b not in hierarchy]
     
-    data['Band_Clean'] = pd.Categorical(data[band_col], categories=full_order, ordered=True)
+    df['Band_Clean'] = pd.Categorical(
+        df[target_map['Band']], 
+        categories=valid_bands + extra_bands, 
+        ordered=True
+    )
 
-    # 4. Compa-Ratio (Crucial for Clustering)
-    if mkt_col and mkt_col in data.columns:
-        data['Market_Ref'] = pd.to_numeric(data[mkt_col], errors='coerce')
-        data['Compa_Ratio'] = data['Target_Pay'] / data['Market_Ref']
-    else:
-        # Fallback if no market data: Use internal median of the Band
-        st.warning("Market Reference (P50) not provided. Calculating Internal Compa-Ratio based on Band Median.")
-        band_medians = data.groupby('Band_Clean')['Target_Pay'].transform('median')
-        data['Compa_Ratio'] = data['Target_Pay'] / band_medians
-
-    # Remove outliers for clean regression/clustering (Optional but recommended)
-    # data = data[data['Compa_Ratio'].between(0.5, 2.0)] 
-
-    return data.dropna(subset=['Target_Pay', 'Experience', 'Rating', 'Compa_Ratio'])
+    # Drop rows where critical calculations are missing (NaNs in Pay or Rating)
+    return df.dropna(subset=['Target_Pay', 'Experience_Clean', 'Calculated_Compa_Ratio', 'Rating_Clean'])
 
 # -----------------------------------------------------------------------------
-# 3. SIDEBAR: INTELLIGENT MAPPING
+# 3. SIDEBAR (File Upload Only)
 # -----------------------------------------------------------------------------
-st.sidebar.header("1. Data Ingestion")
-uploaded_file = st.sidebar.file_uploader("Upload Dataset (CSV/Excel)", type=['csv', 'xlsx', 'xlsb'])
+st.sidebar.header("Data Injection")
+uploaded_file = st.sidebar.file_uploader("Upload 'my_edited_table.xlsx' or .csv", type=['csv', 'xlsx', 'xlsb'])
 
 if uploaded_file:
-    raw_df = load_data(uploaded_file)
-    st.sidebar.success(f"Loaded {len(raw_df)} records.")
-    
-    st.sidebar.header("2. Variable Mapping")
-    cols = raw_df.columns.tolist()
-    
-    # Auto-find likely columns
-    def find_col(keywords):
-        for c in cols:
-            if any(k.lower() in c.lower() for k in keywords):
-                return c
-        return cols[0]
-
-    # Mappings
-    pay_col = st.sidebar.selectbox("Pay Column (PPP USD)", cols, index=cols.index(find_col(['ppp', 'tcc', 'total'])))
-    band_col = st.sidebar.selectbox("Band/Grade", cols, index=cols.index(find_col(['band', 'grade'])))
-    exp_col = st.sidebar.selectbox("Experience/Tenure", cols, index=cols.index(find_col(['exp', 'tenure', 'years'])))
-    rating_col = st.sidebar.selectbox("Performance Rating", cols, index=cols.index(find_col(['rating', 'perf'])))
-    mkt_col = st.sidebar.selectbox("Market P50 (Optional)", ['None'] + cols, index=0)
-    
-    if mkt_col == 'None': mkt_col = None
-
-    # Process Data
-    df = clean_and_prep_data(raw_df, pay_col, band_col, exp_col, rating_col, mkt_col)
-    
-    st.sidebar.markdown("---")
-    st.sidebar.write(f"**Analysis Ready:** {len(df)} Employees")
+    df = load_and_process_data(uploaded_file)
+    st.sidebar.success(f"Processing Complete: {len(df):,} Rows")
+    st.sidebar.success("✅ Successfully locked onto Post-Calculation Columns")
 
     # -------------------------------------------------------------------------
-    # TABS FOR ANALYSIS
+    # MAIN ANALYTICS TABS
     # -------------------------------------------------------------------------
-    tab1, tab2, tab3 = st.tabs(["📉 Mincer Regression", "🧩 K-Means Segmentation", "🧮 Decision Calculators"])
+    tab1, tab2, tab3 = st.tabs(["📉 Mincer Regression (Fair Pay)", "🧩 K-Means Clustering (Risk)", "🧮 Auto-Calculators"])
 
     # --- TAB 1: MINCER REGRESSION ---
     with tab1:
-        st.subheader("Deep Research: Mincer Earnings Function")
-        st.markdown(r"""
-        **Methodology:** OLS Multiple Regression.
-        **Goal:** Isolate the impact of *Experience* and *Performance* on Pay, controlling for *Band*.
-        $$ Pay = \alpha + \beta_1(Exp) + \beta_2(Perf) + \beta_3(Band) + \epsilon $$
-        """)
+        st.subheader("Fair Pay Analysis: Mincer Earnings Function")
+        st.markdown(r"$$ Pay (PPP) = \alpha + \beta_1(Exp) + \beta_2(Perf) + \beta_3(Band) $$")
         
-        # Run OLS
-        # We use Q() to handle column names with spaces
-        formula = "Target_Pay ~ Experience + Rating + C(Band_Clean)"
+        # 1. Run Regression
+        # Q() handles spaces in column names
+        formula = "Q('Annual_TCC (PPP USD)') ~ Experience_Clean + Rating_Clean + C(Band_Clean)"
         model = smf.ols(formula=formula, data=df).fit()
         
-        # Save params for calculators
+        # Store for Calculator
         st.session_state['reg_model'] = model
 
-        # Metrics
+        # 2. Metrics
         c1, c2, c3 = st.columns(3)
-        c1.metric("R-Squared (Explained Variance)", f"{model.rsquared:.2%}")
-        c2.metric("Base Pay (Intercept)", f"${model.params['Intercept']:,.0f}")
-        c3.metric("Pay per Year of Exp", f"${model.params['Experience']:,.0f}")
+        c1.metric("Model Strength (R²)", f"{model.rsquared:.2%}")
+        c2.metric("Base Intercept", f"${model.params['Intercept']:,.0f}")
+        c3.metric("Value of 1 Yr Exp", f"${model.params['Experience_Clean']:,.0f}")
 
-        # Visualizing Coefficients
-        st.markdown("### 📊 Impact of Drivers on Pay")
-        coef_df = pd.DataFrame({
+        # 3. Visualization
+        st.write("### Regression Coefficients (Dollar Value of Each Factor)")
+        coef_data = pd.DataFrame({
             'Factor': model.params.index,
-            'Value ($)': model.params.values
-        }).iloc[1:] # Skip intercept for plotting
+            'Value': model.params.values
+        }).iloc[1:] # Skip intercept
         
-        # Clean up labels for plot
-        coef_df['Factor'] = coef_df['Factor'].astype(str).str.replace("C(Band_Clean)[T.", "Band: ", regex=False).str.replace("]", "", regex=False)
+        # Clean labels
+        coef_data['Factor'] = coef_data['Factor'].str.replace("C(Band_Clean)[T.", "Band: ", regex=False).str.replace("]", "", regex=False)
         
-        fig_coef = px.bar(coef_df, x='Value ($)', y='Factor', orientation='h', 
-                          title="Marginal Dollar Value of Each Factor",
-                          color='Value ($)', color_continuous_scale='Bluered')
-        st.plotly_chart(fig_coef, use_container_width=True)
+        fig = px.bar(coef_data, x='Value', y='Factor', orientation='h', color='Value')
+        st.plotly_chart(fig, use_container_width=True)
         
-        with st.expander("View Detailed Regression Statistics"):
-            st.code(model.summary().as_text())
+        with st.expander("View Full Statistical Summary"):
+            st.text(model.summary().as_text())
 
     # --- TAB 2: K-MEANS CLUSTERING ---
     with tab2:
-        st.subheader("Advanced Segmentation: K-Means Clustering")
-        st.markdown("""
-        **Methodology:** Unsupervised Machine Learning.
-        **Goal:** Segment employees into 4 distinct clusters based on **Performance** and **Compa-Ratio** to identify strategic groups (e.g., Flight Risks vs. Stars).
-        """)
-
-        # Prepare Features for Clustering
-        X = df[['Compa_Ratio', 'Rating']].copy()
+        st.subheader("Employee Segmentation: K-Means Clustering")
+        st.markdown("Segments employees using the pre-calculated **Performance_Rating** and **Compa_Ratio**.")
         
-        # 1. Scale Data (Important because Rating is 1-5 and Compa is 0.5-1.5)
+        # 1. Prep Features (Using the robust end-of-file columns)
+        X = df[['Calculated_Compa_Ratio', 'Rating_Clean']].copy()
+        
+        # Standardize
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
-        # 2. Fit K-Means
-        k = 4
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        # 2. Train K-Means (k=4)
+        kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
         df['Cluster'] = kmeans.fit_predict(X_scaled)
         
-        # 3. Interpret Clusters (Give them meaningful names automatically)
-        # We calculate mean Rating and Compa for each cluster to name them
-        cluster_summary = df.groupby('Cluster')[['Rating', 'Compa_Ratio']].mean()
+        # 3. Auto-Label Clusters
+        cluster_stats = df.groupby('Cluster')[['Rating_Clean', 'Calculated_Compa_Ratio']].mean()
         
-        # Logic to auto-label
         labels = {}
-        for i, row in cluster_summary.iterrows():
-            r = row['Rating']
-            c = row['Compa_Ratio']
-            if r > 3.5 and c < 0.95:
-                labels[i] = "🚨 Flight Risk (High Perf, Low Pay)"
-            elif r > 3.5 and c >= 0.95:
-                labels[i] = "⭐ Star Retained (High Perf, High Pay)"
-            elif r < 3.0 and c > 1.05:
-                labels[i] = "🔻 Overpaid / Low Perf"
-            else:
-                labels[i] = "⚖️ Core Employees"
+        risk_cluster_id = -1
         
+        for i, row in cluster_stats.iterrows():
+            r = row['Rating_Clean']
+            c = row['Calculated_Compa_Ratio']
+            
+            # Logic tailored to your cleaned data ranges
+            if r >= 3.5 and c <= 0.90:
+                labels[i] = "🚨 Flight Risk (Underpaid Star)"
+                risk_cluster_id = i
+            elif r >= 3.5 and c > 0.90:
+                labels[i] = "⭐ Stable Star (Fairly Paid)"
+            elif r < 3.0 and c > 1.05:
+                labels[i] = "🔻 Overpaid Low Performer"
+            else:
+                labels[i] = "⚖️ Standard Performer"
+                
         df['Cluster_Label'] = df['Cluster'].map(labels)
         
-        # 4. Visualization
+        # Save risk label specifically for the calculator
+        st.session_state['risk_label'] = labels.get(risk_cluster_id, "🚨 Flight Risk (Underpaid Star)")
+
+        # 4. Visuals
         col_k1, col_k2 = st.columns([3, 1])
-        
         with col_k1:
-            fig_cluster = px.scatter(
-                df, x='Rating', y='Compa_Ratio', 
-                color='Cluster_Label', 
-                symbol='Cluster_Label',
-                title="Employee Segmentation Map",
-                hover_data=['Band_Clean', 'Experience', 'Target_Pay'],
-                height=500
+            fig_k = px.scatter(
+                df, x='Rating_Clean', y='Calculated_Compa_Ratio',
+                color='Cluster_Label', symbol='Cluster_Label',
+                title="Talent Segmentation Map",
+                hover_data=['Band', 'Experience', 'Annual_TCC (PPP USD)']
             )
-            # Add reference lines
-            fig_cluster.add_hline(y=1.0, line_dash="dash", line_color="grey", annotation_text="Market Median")
-            fig_cluster.add_vline(x=3.0, line_dash="dash", line_color="grey", annotation_text="Avg Perf")
-            st.plotly_chart(fig_cluster, use_container_width=True)
+            fig_k.add_hline(y=1.0, line_dash="dash", line_color="red", annotation_text="Market P50")
+            st.plotly_chart(fig_k, use_container_width=True)
             
         with col_k2:
-            st.markdown("**Cluster Counts:**")
-            counts = df['Cluster_Label'].value_counts()
-            st.dataframe(counts)
-            
-            # Save risk cluster for tool
-            risk_label = "🚨 Flight Risk (High Perf, Low Pay)"
-            # Find the actual label used for risk (in case logic varied)
-            risk_cluster_name = next((v for v in labels.values() if "Flight Risk" in v), None)
-            st.session_state['risk_cluster_name'] = risk_cluster_name
+            st.write("**Segment Distribution**")
+            st.dataframe(df['Cluster_Label'].value_counts())
 
     # --- TAB 3: CALCULATORS ---
     with tab3:
-        st.header("Strategic Calculators")
+        st.header("Decision Support Tools")
         
-        # CALCULATOR A: OFFER GENERATOR (Regression-Based)
-        st.subheader("1. New Hire Offer Calculator")
-        st.info("Uses the **Mincer Regression Coefficients** to suggest an equitable offer.")
+        # 1. OFFER CALCULATOR
+        st.subheader("1. AI Offer Calculator")
+        st.info("Predicts Pay using the Mincer Regression Model.")
         
         if 'reg_model' in st.session_state:
             model = st.session_state['reg_model']
             
-            # Inputs
             c1, c2, c3 = st.columns(3)
-            in_exp = c1.number_input("Years of Experience", 0, 40, 5)
-            in_rating = c2.number_input("Target Performance Rating", 1, 5, 3)
-            # Band selection
-            bands = df['Band_Clean'].unique().tolist()
-            in_band = c3.selectbox("Job Band", sorted([str(b) for b in bands]))
+            in_exp = c1.number_input("Experience (Yrs)", 0, 40, 5)
+            in_rating = c2.number_input("Expected Rating", 1, 5, 3)
+            in_band = c3.selectbox("Target Band", df['Band_Clean'].unique().tolist())
             
-            # Prediction Logic
-            # Base + Exp + Rating
-            pred = model.params['Intercept'] + (model.params['Experience'] * in_exp) + (model.params['Rating'] * in_rating)
-            
+            # Calculate: Intercept + Exp*B1 + Rating*B2
+            base = model.params['Intercept'] + (model.params['Experience_Clean'] * in_exp) + (model.params['Rating_Clean'] * in_rating)
             # Band Premium
-            # Statsmodels keys: C(Band_Clean)[T.BandName]
-            # Reference category (first band) is 0
             band_key = f"C(Band_Clean)[T.{in_band}]"
-            band_val = model.params.get(band_key, 0.0)
+            band_prem = model.params.get(band_key, 0.0)
             
-            final_pred = pred + band_val
+            total = base + band_prem
             
-            # Output
-            st.metric("Fair Market Offer (Predicted)", f"${final_pred:,.0f}")
-            st.caption(f"Recommended Range: ${final_pred*0.9:,.0f} - ${final_pred*1.1:,.0f}")
-        else:
-            st.warning("Please run Tab 1 first.")
+            st.metric("Predicted Fair Pay (PPP USD)", f"${total:,.0f}")
+            st.caption(f"Range: ${total*0.9:,.0f} - ${total*1.1:,.0f}")
             
+        # 2. RETENTION CALCULATOR
         st.markdown("---")
+        st.subheader("2. Flight Risk Retention Budget")
+        st.info("Calculates cost to fix employees in the 'Flight Risk' Cluster.")
         
-        # CALCULATOR B: RETENTION BUDGET (Cluster-Based)
-        st.subheader("2. Retention Budget Estimator")
-        st.info("Identifies employees in the **'Flight Risk' Cluster** (ML-identified) and calculates cost to fix.")
-        
-        if 'risk_cluster_name' in st.session_state and st.session_state['risk_cluster_name']:
-            risk_name = st.session_state['risk_cluster_name']
-            
-            # Filter Data
-            risk_df = df[df['Cluster_Label'] == risk_name].copy()
+        risk_label = st.session_state.get('risk_label')
+        if risk_label:
+            # Filter specifically for the Risk Cluster identified in Tab 2
+            risk_df = df[df['Cluster_Label'] == risk_label].copy()
             
             if not risk_df.empty:
-                # Calc cost to bring to 1.0 Compa Ratio (Market Median)
-                risk_df['Cost_to_Retain'] = (risk_df['Target_Pay'] / risk_df['Compa_Ratio']) - risk_df['Target_Pay']
+                # Use pre-calculated P50 and TCC
+                risk_df['Gap'] = risk_df['P50 (PPP USD)'] - risk_df['Annual_TCC (PPP USD)']
                 
-                # Only positive costs
-                risk_df['Cost_to_Retain'] = risk_df['Cost_to_Retain'].apply(lambda x: max(x, 0))
-                
-                total_cost = risk_df['Cost_to_Retain'].sum()
+                # Only consider positive gaps (where they are underpaid)
+                total_gap = risk_df[risk_df['Gap'] > 0]['Gap'].sum()
                 
                 k1, k2 = st.columns(2)
-                k1.error(f"High Risk Employees: {len(risk_df)}")
-                k2.metric("Total Adjustment Budget Needed", f"${total_cost:,.0f}")
+                k1.error(f"Employees at Risk: {len(risk_df)}")
+                k2.metric("Budget to Normalize to P50", f"${total_gap:,.0f}")
                 
-                with st.expander("View Employee List"):
-                    st.dataframe(risk_df[['Band_Clean', 'Experience', 'Rating', 'Compa_Ratio', 'Cost_to_Retain']])
+                with st.expander("See Employee List"):
+                    st.dataframe(risk_df[['ID', 'Band', 'Experience', 'Annual_TCC (PPP USD)', 'Gap']])
             else:
-                st.success("No employees found in the Flight Risk cluster.")
+                st.success("No critical flight risks detected in this cluster.")
         else:
             st.warning("Please run Tab 2 first to generate clusters.")
 
 else:
-    st.info("👋 Upload your CSV/Excel file to begin.")
+    st.info("Waiting for file upload...")
