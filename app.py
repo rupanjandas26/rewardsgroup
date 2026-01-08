@@ -114,7 +114,7 @@ def load_and_process_data(file):
 # -----------------------------------------------------------------------------
 # 3. SIDEBAR & EXECUTION
 # -----------------------------------------------------------------------------
-st.sidebar.header("Data Ingestion")
+st.sidebar.header("Data Upload")
 uploaded_file = st.sidebar.file_uploader("Upload Wipro Data (.xlsx, .xlsb, .csv)", type=['xlsx', 'xlsb', 'csv'])
 
 if uploaded_file:
@@ -166,7 +166,7 @@ if uploaded_file:
         # TAB 2: K-MEANS SEGMENTATION (Strategic Risk)
         # =====================================================================
         with tab2:
-            st.subheader("AI-Driven Workforce Segmentation")
+            st.subheader("Workforce Segmentation")
             st.markdown("""
             **Quadrant Analysis:** We cluster employees based on **Performance (Avg Rating)** and **Pay Fairness (Compa-Ratio)**.
             This automatically identifies Flight Risks and Mis-priced talent.
@@ -265,9 +265,9 @@ if uploaded_file:
         # TAB 3: STRATEGIC TOOLS (Offer Calculator)
         # =====================================================================
         with tab3:
-            st.header("Strategic HR Tools")
+            st.header("Tools")
             
-            st.subheader("💰 Scientific Offer Calculator")
+            st.subheader("Offer Calculator")
             st.info("Predicts 'Internal Equity' price using Mincer Coefficients from Tab 1.")
             
             if 'reg_params' in st.session_state:
