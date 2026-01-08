@@ -181,7 +181,7 @@ if uploaded_file:
             cluster_cols = ['Avg_Rating', 'Compa_Ratio']
             cluster_data = df[cluster_cols].dropna().copy()
             
-            if not cluster_data.empty:
+            if len(cluster_data) >= 4:
                 # 1. Scale
                 scaler = StandardScaler()
                 X_scaled = scaler.fit_transform(cluster_data)
@@ -190,28 +190,29 @@ if uploaded_file:
                 kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
                 cluster_data['Cluster'] = kmeans.fit_predict(X_scaled)
                 
-                # 3. DYNAMIC LABELING LOGIC (From Snippet)
-                # We compare cluster centers to the Global Average
-                global_avg_rating = cluster_data['Avg_Rating'].mean()
-                global_avg_compa = cluster_data['Compa_Ratio'].mean()
+                # 3. DYNAMIC LABELING (RANKING BASED)
+                # To guarantee 4 distinct names, we sort the clusters instead of using strict absolute thresholds.
                 
                 # Compute centroid for each cluster
-                cluster_stats = cluster_data.groupby('Cluster')[['Avg_Rating', 'Compa_Ratio']].mean()
+                cluster_stats = cluster_data.groupby('Cluster')[['Avg_Rating', 'Compa_Ratio']].mean().reset_index()
+                
+                # A. Sort by Rating to find Top 2 (High Perf) and Bottom 2 (Low Perf)
+                cluster_stats = cluster_stats.sort_values(by='Avg_Rating', ascending=False)
+                
+                high_perf_clusters = cluster_stats.iloc[:2].copy()
+                low_perf_clusters = cluster_stats.iloc[2:].copy()
                 
                 labels = {}
-                for i, row in cluster_stats.iterrows():
-                    # Logic: High Perf / Low Pay = Flight Risk
-                    if row['Avg_Rating'] >= global_avg_rating and row['Compa_Ratio'] < global_avg_compa:
-                        labels[i] = "🚨 Flight Risk (Underpaid Star)"
-                    # Logic: High Perf / High Pay = Stable Star
-                    elif row['Avg_Rating'] >= global_avg_rating and row['Compa_Ratio'] >= global_avg_compa:
-                        labels[i] = "⭐ Stable Star"
-                    # Logic: Low Perf / High Pay = Overpaid
-                    elif row['Avg_Rating'] < global_avg_rating and row['Compa_Ratio'] >= global_avg_compa:
-                        labels[i] = "🔻 Overpaid / Low Perf"
-                    # Logic: Low Perf / Low Pay = Core
-                    else:
-                        labels[i] = "⚖️ Core Employee"
+                
+                # B. Within High Perf: Split by Pay (Higher Pay = Stable, Lower Pay = Risk)
+                high_perf_clusters = high_perf_clusters.sort_values(by='Compa_Ratio', ascending=False)
+                labels[high_perf_clusters.iloc[0]['Cluster']] = "⭐ Stable Star (High Perf / High Pay)"
+                labels[high_perf_clusters.iloc[1]['Cluster']] = "🚨 Flight Risk (High Perf / Low Pay)"
+                
+                # C. Within Low Perf: Split by Pay (Higher Pay = Overpaid, Lower Pay = Core)
+                low_perf_clusters = low_perf_clusters.sort_values(by='Compa_Ratio', ascending=False)
+                labels[low_perf_clusters.iloc[0]['Cluster']] = "🔻 Overpaid (Low Perf / High Pay)"
+                labels[low_perf_clusters.iloc[1]['Cluster']] = "⚖️ Core Employee (Low Perf / Low Pay)"
                 
                 # Map labels back to dataframe
                 df.loc[cluster_data.index, 'Cluster_Label'] = cluster_data['Cluster'].map(labels)
@@ -220,12 +221,12 @@ if uploaded_file:
                 st.markdown("### 🧬 The Strategic Talent Map")
                 plot_df = df.dropna(subset=['Cluster_Label']).copy()
                 
-                # Define specific colors if possible, otherwise auto
+                # Define specific colors
                 color_map = {
-                    "🚨 Flight Risk (Underpaid Star)": "red",
-                    "⭐ Stable Star": "green",
-                    "🔻 Overpaid / Low Perf": "orange",
-                    "⚖️ Core Employee": "blue"
+                    "🚨 Flight Risk (High Perf / Low Pay)": "red",
+                    "⭐ Stable Star (High Perf / High Pay)": "green",
+                    "🔻 Overpaid (Low Perf / High Pay)": "orange",
+                    "⚖️ Core Employee (Low Perf / Low Pay)": "blue"
                 }
 
                 fig_cluster = px.scatter(
@@ -263,15 +264,13 @@ if uploaded_file:
                 }))
 
             else:
-                st.warning("Not enough clean data for clustering.")
+                st.warning("Not enough clean data to generate 4 clusters (Need at least 4 records).")
 
         # =====================================================================
         # TAB 3: STRATEGIC TOOLS (Offer Calculator)
         # =====================================================================
         with tab3:
             st.header("Strategic HR Tools")
-            
-            # (Tool B Removed as requested)
             
             st.subheader("💰 Scientific Offer Calculator")
             st.info("Predicts 'Internal Equity' price using Mincer Coefficients from Tab 1.")
