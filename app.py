@@ -90,7 +90,7 @@ def load_and_process_data(file):
         # Clean band data
         df = df.astype(str).str.strip()
         # Find which bands from our standard list actually exist in the data
-        valid_bands_in_data =.unique()
+        valid_bands_in_data =.unique()]
         
         # If no standard bands found, just use the sorted unique values from data
         if not valid_bands_in_data:
