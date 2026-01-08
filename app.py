@@ -90,7 +90,7 @@ def load_and_process_data(file):
     band_order =
     if 'Band' in df.columns:
         # Only keep bands that exist in this dataset to prevent categorical errors
-        found_bands =.unique()
+        found_bands =.unique()]
         df = pd.Categorical(df, categories=found_bands, ordered=True)
 
     # --- LOGIC 5: MARKET BENCHMARK ---
