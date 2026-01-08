@@ -62,18 +62,25 @@ def load_and_process_data(file):
     else:
         return None, "Critical Error: No Pay Column (Annual_TCC) found."
 
-    # --- LOGIC 2: 3-YEAR PERFORMANCE AVERAGE ---
-    # We use 'Sustained Performance' (Avg of 3 years) instead of just 'Current Rating'.
+    # --- LOGIC 2: 3-YEAR PERFORMANCE AVERAGE (FIXED) ---
+    # CRITICAL FIX: Explicitly convert to numeric before calculating mean
     rating_cols = ['Current_Rating', 'Previous_Rating', 'Pre_Previous_Rating']
     existing_ratings = [c for c in rating_cols if c in df.columns]
     
     if existing_ratings:
+        # Force numeric conversion (turns ' ' or errors into NaN)
+        for col in existing_ratings:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        
         # Row-wise mean, ignoring NaNs
         df['Avg_Rating'] = df[existing_ratings].mean(axis=1)
     elif 'Performance_Rating' in df.columns:
         df['Avg_Rating'] = pd.to_numeric(df['Performance_Rating'], errors='coerce')
     else:
         df['Avg_Rating'] = 3.0 # Neutral default
+
+    # Fill NaN ratings with a neutral 3.0 to prevent regression errors later
+    df['Avg_Rating'] = df['Avg_Rating'].fillna(3.0)
 
     # --- LOGIC 3: EXPERIENCE VS TENURE ---
     if 'Experience' in df.columns:
@@ -82,15 +89,22 @@ def load_and_process_data(file):
         df['Total_Experience'] = pd.to_numeric(df['Tenure'], errors='coerce')
     else:
         df['Total_Experience'] = 0.0
+    
+    # Fill NaN experience with 0
+    df['Total_Experience'] = df['Total_Experience'].fillna(0.0)
 
     # --- LOGIC 4: BAND HIERARCHY ---
     # Critical for OLS to set the "Reference Group" correctly
     band_order = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'D1', 'D2', 'E']
     
     if 'Band' in df.columns:
+        # Ensure Band is string first
+        df['Band'] = df['Band'].astype(str).str.strip()
+        
         # Only keep bands that exist in this dataset to prevent categorical errors
         unique_bands_in_data = df['Band'].unique()
         found_bands = [b for b in band_order if b in unique_bands_in_data]
+        
         # Add any bands found in data but not in our list to the end
         extra_bands = [b for b in unique_bands_in_data if b not in found_bands]
         final_bands = found_bands + extra_bands
@@ -163,6 +177,7 @@ if uploaded_file:
                 coef_data = []
                 for idx, val in model.params.items():
                     if "Band" in idx:
+                        # Clean up statsmodels naming 'C(Band)[T.A1]' -> 'A1'
                         band_name = idx.replace("C(Band)[T.", "").replace("]", "")
                         coef_data.append({"Factor": f"Promotion to {band_name}", "Pay Premium": val})
                     elif "Avg_Rating" in idx:
@@ -173,6 +188,7 @@ if uploaded_file:
                 
             except Exception as e:
                 st.error(f"Regression Failed: {e}")
+                st.write("Tip: Ensure your data has enough rows and the 'Band' column is clean.")
 
         # =====================================================================
         # TAB 2: K-MEANS CLUSTERING (AI SEGMENTATION)
@@ -187,49 +203,61 @@ if uploaded_file:
             # 1. Feature Selection
             # We cluster on: Experience (Seniority), Rating (Merit), Pay (Cost)
             cluster_cols = ['Total_Experience', 'Avg_Rating', 'Annual_TCC_PPP']
-            cluster_data = df[cluster_cols].copy()
             
-            # 2. Scaling (Crucial for K-Means)
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(cluster_data)
+            # Ensure no NaNs in clustering data
+            cluster_data = df[cluster_cols].dropna().copy()
             
-            # 3. K-Means Execution
-            k = st.slider("Select Number of Clusters", 2, 6, 4)
-            kmeans = KMeans(n_clusters=k, random_state=42)
-            df['Cluster'] = kmeans.fit_predict(X_scaled)
-            
-            # 4. Visualizing the Segments
-            st.markdown("### 🧬 Cluster Visualization")
-            fig_cluster = px.scatter(
-                df, 
-                x='Total_Experience', 
-                y='Annual_TCC_PPP', 
-                color='Cluster',
-                size='Avg_Rating',
-                hover_data=['Band', 'Avg_Rating'],
-                title="Workforce Tribes: Pay vs. Experience (Color = Cluster)",
-                template="plotly_white"
-            )
-            st.plotly_chart(fig_cluster, use_container_width=True)
-            
-            # 5. Interpreting the Clusters (The "So What?")
-            st.markdown("### 🕵️ Audit: Identifying the 'Risk' Cluster")
-            cluster_summary = df.groupby('Cluster').agg({
-                'Annual_TCC_PPP': 'mean',
-                'Total_Experience': 'mean',
-                'Avg_Rating': 'mean'
-            }).reset_index()
-            
-            cluster_summary.columns = ['Cluster', 'Avg Pay', 'Avg Exp', 'Avg Rating']
-            
-            # Highlight Logic
-            st.dataframe(cluster_summary.style.format({
-                'Avg Pay': '${:,.0f}', 
-                'Avg Exp': '{:.1f} Yrs', 
-                'Avg Rating': '{:.2f}'
-            }).background_gradient(subset=['Avg Pay'], cmap='RdYlGn'))
-            
-            st.caption("Look for clusters with **High Rating/Exp** but **Low Pay**. These are your Flight Risks.")
+            if not cluster_data.empty:
+                # 2. Scaling (Crucial for K-Means)
+                scaler = StandardScaler()
+                X_scaled = scaler.fit_transform(cluster_data)
+                
+                # 3. K-Means Execution
+                k = st.slider("Select Number of Clusters", 2, 6, 4)
+                kmeans = KMeans(n_clusters=k, random_state=42)
+                
+                # Assign clusters back to the main dataframe (using index alignment)
+                df.loc[cluster_data.index, 'Cluster'] = kmeans.fit_predict(X_scaled)
+                
+                # 4. Visualizing the Segments
+                st.markdown("### 🧬 Cluster Visualization")
+                # Drop rows that weren't clustered (if any)
+                plot_df = df.dropna(subset=['Cluster']).copy()
+                plot_df['Cluster'] = plot_df['Cluster'].astype(str)
+                
+                fig_cluster = px.scatter(
+                    plot_df, 
+                    x='Total_Experience', 
+                    y='Annual_TCC_PPP', 
+                    color='Cluster',
+                    size='Avg_Rating',
+                    hover_data=['Band', 'Avg_Rating'],
+                    title="Workforce Tribes: Pay vs. Experience (Color = Cluster)",
+                    template="plotly_white"
+                )
+                st.plotly_chart(fig_cluster, use_container_width=True)
+                
+                # 5. Interpreting the Clusters (The "So What?")
+                st.markdown("### 🕵️ Audit: Identifying the 'Risk' Cluster")
+                cluster_summary = plot_df.groupby('Cluster').agg({
+                    'Annual_TCC_PPP': 'mean',
+                    'Total_Experience': 'mean',
+                    'Avg_Rating': 'mean',
+                    'Band': 'count'
+                }).reset_index()
+                
+                cluster_summary.columns = ['Cluster', 'Avg Pay', 'Avg Exp', 'Avg Rating', 'Count']
+                
+                # Highlight Logic
+                st.dataframe(cluster_summary.style.format({
+                    'Avg Pay': '${:,.0f}', 
+                    'Avg Exp': '{:.1f} Yrs', 
+                    'Avg Rating': '{:.2f}'
+                }).background_gradient(subset=['Avg Pay'], cmap='RdYlGn'))
+                
+                st.caption("Look for clusters with **High Rating/Exp** but **Low Pay**. These are your Flight Risks.")
+            else:
+                st.warning("Not enough clean data for clustering.")
 
         # =====================================================================
         # TAB 3: LOGIC-BASED TOOLS
@@ -295,10 +323,12 @@ if uploaded_file:
                     # Calculate cost to fix (raise to 1.0 Compa Ratio)
                     if 'Market_P50' in risk_df.columns:
                         risk_df['Cost_to_Fix'] = (risk_df['Market_P50'] - risk_df['Annual_TCC_PPP'])
+                        # Clean negative costs (if any)
+                        risk_df['Cost_to_Fix'] = risk_df['Cost_to_Fix'].apply(lambda x: max(x, 0))
                         total_fix = risk_df['Cost_to_Fix'].sum()
                         st.metric("Budget to Retain", f"${total_fix:,.0f}")
                     
-                    st.dataframe(risk_df[['ID', 'Band', 'Avg_Rating', 'Compa_Ratio', 'Annual_TCC_PPP']])
+                    st.dataframe(risk_df[['Band', 'Avg_Rating', 'Compa_Ratio', 'Annual_TCC_PPP']])
                 else:
                     st.success("No critical flight risks identified based on current logic.")
 
