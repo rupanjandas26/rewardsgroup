@@ -212,8 +212,8 @@ if uploaded_file:
                 scaler = StandardScaler()
                 X_scaled = scaler.fit_transform(cluster_data)
                 
-                # 3. K-Means Execution
-                k = st.slider("Select Number of Clusters", 2, 6, 4)
+                # 3. K-Means Execution (HARDCODED to 4 CLUSTERS)
+                k = 4
                 kmeans = KMeans(n_clusters=k, random_state=42)
                 
                 # Assign clusters back to the main dataframe (using index alignment)
@@ -248,12 +248,12 @@ if uploaded_file:
                 
                 cluster_summary.columns = ['Cluster', 'Avg Pay', 'Avg Exp', 'Avg Rating', 'Count']
                 
-                # Highlight Logic
+                # Display Summary (Gradient Removed to fix ImportError)
                 st.dataframe(cluster_summary.style.format({
                     'Avg Pay': '${:,.0f}', 
                     'Avg Exp': '{:.1f} Yrs', 
                     'Avg Rating': '{:.2f}'
-                }).background_gradient(subset=['Avg Pay'], cmap='RdYlGn'))
+                }))
                 
                 st.caption("Look for clusters with **High Rating/Exp** but **Low Pay**. These are your Flight Risks.")
             else:
