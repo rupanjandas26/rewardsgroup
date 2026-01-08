@@ -44,16 +44,14 @@ def load_and_process_data(file):
     df.columns = df.columns.str.strip()
 
     # --- LOGIC 1: CURRENCY & PPP NORMALIZATION ---
-    # We prefer the pre-calculated 'Annual_TCC (PPP USD)' if it exists (from your file).
-    # If not, we calculate it using standard factors.
-    
+    # We prefer the pre-calculated 'Annual_TCC (PPP USD)' if it exists.
     target_col = 'Annual_TCC_PPP'
     
     if 'Annual_TCC (PPP USD)' in df.columns:
         df[target_col] = pd.to_numeric(df, errors='coerce')
     elif 'Annual_TCC' in df.columns:
         # Fallback PPP Logic
-        ppp_factors = {'USD': 1.0, 'INR': 0.044, 'PHP': 0.052} # Approx conversion
+        ppp_factors = {'USD': 1.0, 'INR': 0.044, 'PHP': 0.052} 
         # Ensure Currency column exists, default to USD if missing
         curr_col = df['Currency'] if 'Currency' in df.columns else 'USD'
         df['PPP_Factor'] = curr_col.map(ppp_factors).fillna(1.0)
@@ -63,12 +61,11 @@ def load_and_process_data(file):
 
     # --- LOGIC 2: 3-YEAR PERFORMANCE AVERAGE ---
     # We use 'Sustained Performance' (Avg of 3 years) instead of just 'Current Rating'.
-    # This stabilizes the regression and prevents one bad year from skewing the prediction.
     rating_cols =
     existing_ratings = [c for c in rating_cols if c in df.columns]
     
     if existing_ratings:
-        # Row-wise mean, ignoring NaNs (e.g., new hires might only have Current_Rating)
+        # Row-wise mean, ignoring NaNs
         df = df[existing_ratings].mean(axis=1)
     elif 'Performance_Rating' in df.columns:
         df = pd.to_numeric(df, errors='coerce')
@@ -77,7 +74,6 @@ def load_and_process_data(file):
 
     # --- LOGIC 3: EXPERIENCE VS TENURE ---
     # Decision: Use 'Experience' (Total) for Market Value/Mincer Equation.
-    # Reason: New hire offers are based on Total Exp, not just Wipro Tenure.
     if 'Experience' in df.columns:
         df = pd.to_numeric(df['Experience'], errors='coerce')
     elif 'Tenure' in df.columns:
@@ -88,9 +84,16 @@ def load_and_process_data(file):
     # --- LOGIC 4: BAND HIERARCHY ---
     # Critical for OLS to set the "Reference Group" correctly (A3/AA is base).
     band_order =
+    
     if 'Band' in df.columns:
         # Only keep bands that exist in this dataset to prevent categorical errors
-        found_bands =.unique()]
+        valid_bands_in_data = df.unique()
+        found_bands = [b for b in band_order if b in valid_bands_in_data]
+        
+        # If no matching bands found (e.g. different naming convention), use unique values sorted
+        if not found_bands:
+            found_bands = sorted(df.astype(str).unique())
+            
         df = pd.Categorical(df, categories=found_bands, ordered=True)
 
     # --- LOGIC 5: MARKET BENCHMARK ---
@@ -100,12 +103,19 @@ def load_and_process_data(file):
         df = df[target_col] / df['Market_P50']
     elif 'Compa_Ratio' in df.columns:
         df = pd.to_numeric(df, errors='coerce')
+        # Estimate Market P50 if missing for tool calculation
+        df['Market_P50'] = df[target_col] / df
     else:
-        df = 1.0 # Default
+        df = 1.0 
+        df['Market_P50'] = df[target_col]
 
-    # Final Cleanup
-    modeling_cols =
-    df_clean = df[modeling_cols].dropna(subset=).copy()
+    # Final Cleanup - Select only needed columns to avoid errors
+    required_cols =
+    # Filter to only columns that actually exist
+    final_cols = [c for c in required_cols if c in df.columns]
+    
+    # Drop rows where critical regression data is missing
+    df_clean = df[final_cols].dropna().copy()
     
     return df_clean, None
 
@@ -141,31 +151,39 @@ if uploaded_file:
             # Run OLS
             # Q() handles spaces in column names automatically
             formula = "Q('Annual_TCC_PPP') ~ Total_Experience + Avg_Rating + C(Band)"
-            model = smf.ols(formula=formula, data=df).fit()
-            
-            # Save for calculators
-            st.session_state['reg_params'] = model.params
-            
-            # Metrics
-            c1, c2, c3 = st.columns(3)
-            c1.metric("R-Squared (Explained Variance)", f"{model.rsquared:.2%}", "Higher is better")
-            c2.metric("Base Pay (Intercept)", f"${model.params['Intercept']:,.0f}")
-            c3.metric("Premium per Year of Exp", f"${model.params:,.0f}")
-            
-            st.markdown("### 📊 Coefficient Analysis")
-            st.info("This table shows exactly how much Wipro pays for each attribute, holding everything else constant.")
-            
-            # Extract Band Coefficients cleanly
-            coef_data =
-            for idx, val in model.params.items():
-                if "Band" in idx:
-                    band_name = idx.split("replace("]", "")
-                    coef_data.append({"Factor": f"Promotion to {band_name}", "Pay Premium": val})
-                elif "Avg_Rating" in idx:
-                    coef_data.append({"Factor": "1 Point Increase in Rating", "Pay Premium": val})
-            
-            coef_df = pd.DataFrame(coef_data)
-            st.dataframe(coef_df.style.format({"Pay Premium": "${:,.0f}"}), use_container_width=True)
+            try:
+                model = smf.ols(formula=formula, data=df).fit()
+                
+                # Save for calculators
+                st.session_state['reg_params'] = model.params
+                
+                # Metrics
+                c1, c2, c3 = st.columns(3)
+                c1.metric("R-Squared (Explained Variance)", f"{model.rsquared:.2%}", "Higher is better")
+                c2.metric("Base Pay (Intercept)", f"${model.params['Intercept']:,.0f}")
+                c3.metric("Premium per Year of Exp", f"${model.params.get('Total_Experience', 0):,.0f}")
+                
+                st.markdown("### 📊 Coefficient Analysis")
+                st.info("This table shows exactly how much Wipro pays for each attribute, holding everything else constant.")
+                
+                # Extract Band Coefficients cleanly
+                coef_data =
+                for idx, val in model.params.items():
+                    if "Band" in idx:
+                        # Clean up statsmodels naming "C(Band)" -> "B1"
+                        band_name = idx.replace("C(Band)", "")
+                        coef_data.append({"Factor": f"Promotion to {band_name}", "Pay Premium": val})
+                    elif "Avg_Rating" in idx:
+                        coef_data.append({"Factor": "1 Point Increase in Rating", "Pay Premium": val})
+                
+                if coef_data:
+                    coef_df = pd.DataFrame(coef_data)
+                    st.dataframe(coef_df.style.format({"Pay Premium": "${:,.0f}"}), use_container_width=True)
+                else:
+                    st.warning("No significant coefficients found for Bands or Rating.")
+                    
+            except Exception as e:
+                st.error(f"Regression Failed: {e}. Check if Data has enough variance.")
 
         # =====================================================================
         # TAB 2: K-MEANS CLUSTERING (AI SEGMENTATION)
@@ -179,15 +197,18 @@ if uploaded_file:
             
             # 1. Feature Selection
             # We cluster on: Experience (Seniority), Rating (Merit), Pay (Cost)
-            cluster_features = df].copy()
+            # Create a copy to avoid SettingWithCopy warnings
+            cluster_data = df].copy()
             
             # 2. Scaling (Crucial for K-Means)
             scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(cluster_features)
+            X_scaled = scaler.fit_transform(cluster_data)
             
             # 3. K-Means Execution
             k = st.slider("Select Number of Clusters", 2, 6, 4)
             kmeans = KMeans(n_clusters=k, random_state=42)
+            
+            # Assign clusters back to the main dataframe
             df['Cluster'] = kmeans.fit_predict(X_scaled)
             
             # 4. Visualizing the Segments
@@ -210,7 +231,7 @@ if uploaded_file:
                 'Annual_TCC_PPP': 'mean',
                 'Total_Experience': 'mean',
                 'Avg_Rating': 'mean',
-                'ID': 'count'
+                'Compa_Ratio': 'count' # Using Compa_Ratio as a proxy for count
             }).reset_index()
             
             cluster_summary.columns =
@@ -243,25 +264,33 @@ if uploaded_file:
                     p = st.session_state['reg_params']
                     
                     # Extract bands from params keys for dropdown
-                    bands =replace("]", "") for k in p.keys() if "Band" in k]
+                    # Clean up statsmodels naming "C(Band)" -> "B1"
+                    bands =", "") for k in p.keys() if "Band" in k]
                     
-                    target_band = st.selectbox("Role Band", sorted(bands))
-                    candidate_exp = st.number_input("Candidate Total Experience (Yrs)", 0, 30, 5)
-                    target_rating = 3.0 # Assume 'Meets Expectations' for new hire standard
-                    
-                    # Calculation
-                    # y = Intercept + (Band_Coef) + (Exp * Exp_Coef) + (Rating * Rating_Coef)
-                    base = p['Intercept']
-                    band_premium = p.get(f"C(Band)", 0)
-                    exp_val = p * candidate_exp
-                    rating_val = p * target_rating
-                    
-                    fair_pay = base + band_premium + exp_val + rating_val
-                    
-                    st.metric("Fair Market Offer", f"${fair_pay:,.0f}")
-                    st.write(f"**Range (+/- 10%):** \n${fair_pay*0.9:,.0f} - ${fair_pay*1.1:,.0f}")
+                    if not bands:
+                        st.warning("No band coefficients found. Model might not have enough band data.")
+                    else:
+                        target_band = st.selectbox("Role Band", sorted(bands))
+                        candidate_exp = st.number_input("Candidate Total Experience (Yrs)", 0, 30, 5)
+                        target_rating = 3.0 # Assume 'Meets Expectations' for new hire standard
+                        
+                        # Calculation
+                        # y = Intercept + (Band_Coef) + (Exp * Exp_Coef) + (Rating * Rating_Coef)
+                        base = p['Intercept']
+                        
+                        # Use exact key matching for band
+                        band_key = f"C(Band)"
+                        band_premium = p.get(band_key, 0)
+                        
+                        exp_val = p.get('Total_Experience', 0) * candidate_exp
+                        rating_val = p.get('Avg_Rating', 0) * target_rating
+                        
+                        fair_pay = base + band_premium + exp_val + rating_val
+                        
+                        st.metric("Fair Market Offer", f"${fair_pay:,.0f}")
+                        st.write(f"**Range (+/- 10%):** \n${fair_pay*0.9:,.0f} - ${fair_pay*1.1:,.0f}")
                 else:
-                    st.warning("Model not trained.")
+                    st.warning("Model not trained. Go to Tab 1 first.")
 
             # TOOL B: Flight Risk (Boolean Logic Based)
             with col_b:
@@ -279,12 +308,13 @@ if uploaded_file:
                     (df < 0.85)
                 )
                 
-                risk_df = df[risk_mask]
+                risk_df = df[risk_mask].copy()
                 
                 st.metric("At-Risk Employees", len(risk_df))
                 
                 if not risk_df.empty:
                     # Calculate cost to fix (raise to 1.0 Compa Ratio)
+                    # Cost = Market_P50 - Current Pay
                     risk_df['Cost_to_Fix'] = (risk_df['Market_P50'] - risk_df)
                     total_fix = risk_df['Cost_to_Fix'].sum()
                     
