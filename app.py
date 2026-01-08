@@ -87,9 +87,11 @@ def load_and_process_data(file):
     band_order =
     
     if 'Band' in df.columns:
-        # Clean band data
+        # Clean band data - FIX: Operate on the column, not the whole dataframe
         df = df.astype(str).str.strip()
+        
         # Find which bands from our standard list actually exist in the data
+        # FIX: Correct List Comprehension Syntax
         valid_bands_in_data =.unique()]
         
         # If no standard bands found, just use the sorted unique values from data
@@ -111,12 +113,13 @@ def load_and_process_data(file):
         df = 1.0 
         df['Market_P50'] = df[target_col]
 
-    # Final Cleanup: Drop rows where critical regression data is missing
-    critical_cols =
-    if 'Band' in df.columns:
-        critical_cols.append('Band')
-        
-    df_clean = df.dropna(subset=critical_cols).copy()
+    # Final Cleanup: Keep only necessary columns
+    keep_cols =
+    # Only keep cols that actually exist to avoid KeyErrors
+    final_cols = [c for c in keep_cols if c in df.columns]
+    
+    # Drop rows where critical regression data is missing
+    df_clean = df[final_cols].dropna().copy()
     
     return df_clean, None
 
@@ -131,7 +134,7 @@ if uploaded_file:
     
     if error_msg:
         st.error(error_msg)
-    else:
+    elif df is not None and not df.empty:
         st.sidebar.success(f"Successfully Loaded: {len(df):,} Employees")
         
         # TABS
@@ -290,7 +293,7 @@ if uploaded_file:
                         st.metric("Fair Market Offer", f"${fair_pay:,.0f}")
                         st.write(f"**Range (+/- 10%):** \n${fair_pay*0.9:,.0f} - ${fair_pay*1.1:,.0f}")
                     else:
-                        st.warning("No band data available in regression model.")
+                        st.warning("No band data available in regression model. Check if 'Band' column was loaded correctly.")
                 else:
                     st.warning("Model not trained. Go to Tab 1 first.")
 
@@ -329,6 +332,8 @@ if uploaded_file:
                         st.success("No critical flight risks identified based on current logic.")
                 else:
                     st.warning("Compa-Ratio data missing.")
+    else:
+        st.error("Data loading failed. Please check the file format.")
 
 else:
     st.info("Waiting for data file...")
