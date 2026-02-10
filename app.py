@@ -101,8 +101,8 @@ def load_and_clean_data(file):
 
 # --- 6. MAIN APP LOGIC ---
 
-st.title("Reward Management Group Assignment: Wipro Analysis")
-st.markdown("### Group 13")
+st.title("Wipro Analysis")
+st.markdown("### Semester 2: Reward Management Group Assignment | Group 13")
 
 if uploaded_file is not None:
     df = load_and_clean_data(uploaded_file)
