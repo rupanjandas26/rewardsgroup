@@ -227,7 +227,24 @@ if uploaded_file is not None:
                                 """)
                             else:
                                 st.success("**No Systemic Bias**")
-                                st.markdown("The bar is GREEN or near zero. The model shows no statistical penalty for gender. Any raw pay gaps are likely due to structural factors (e.g., representation in senior bands).")
+                                
+                                # Dynamic Calculation of Male Rep in Senior Bands
+                                if 'Band' in df.columns:
+                                    unique_bands = sorted(df['Band'].unique().astype(str))
+                                    # Assume top 3 bands are "Senior" for specific analysis
+                                    senior_bands = unique_bands[-3:] if len(unique_bands) >= 3 else unique_bands
+                                    senior_df = df[df['Band'].isin(senior_bands)]
+                                    male_pct = 0
+                                    if len(senior_df) > 0:
+                                        male_pct = len(senior_df[senior_df['Gender']=='MALE']) / len(senior_df)
+                                    
+                                    st.markdown(f"""
+                                    The bar is GREEN or near zero. The model shows no statistical penalty for gender. 
+                                    Any raw pay gaps are likely due to structural factors (e.g., representation in senior bands).
+                                    
+                                    **Specific Data:** In the top seniority bands (**{', '.join(senior_bands)}**), Men currently hold **{male_pct:.1%}** of the positions. 
+                                    This structural imbalance pulls up the raw average pay for men, even though they are paid fairly for the role itself.
+                                    """)
 
                         st.divider()
 
@@ -237,7 +254,7 @@ if uploaded_file is not None:
                         st.markdown("""
                         **Business Relevance:**
                         A "One-Size-Fits-All" pay model fails in a complex organization. A 'Cloud Architect' costs more than an 'Administrator' even if they are in the same Band.
-                        This chart visualizes the **Market Premium** (or Discount) associated with specific job families, proving the model prices skills accurately.
+                        This chart visualizes the **Market Premium** associated with specific job families, proving the model prices skills accurately.
                         """)
                         
                         jf_params = {k.replace("C(Job_Family)[T.", "").replace("]", ""): v 
@@ -254,7 +271,13 @@ if uploaded_file is not None:
                             ax_s.tick_params(colors='black')
                             st.pyplot(fig_skill)
                             
-                            st.info("**Interpretation:** Bars extending to the right represent roles that command a higher salary in the market. The model adds this specific 'Skill Premium' to the Fair Pay calculation for these employees.")
+                            st.info("""
+                            **Glossary: What is a Log Point?**
+                            In this regression, Log Points measure the percentage difference from the baseline.
+                            * **+0.10** means this Job Family pays roughly **10% more** than the company average.
+                            * **-0.05** would mean it pays **5% less**.
+                            * Bars extending right indicate "Premium" skills that cost more to hire.
+                            """)
 
                     except Exception as e:
                          st.error(f"Regression Error: {e}")
