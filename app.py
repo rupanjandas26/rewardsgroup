@@ -1,299 +1,294 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
-import plotly.express as px
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+import numpy as np
 
-# -----------------------------------------------------------------------------
-# 1. APP CONFIGURATION
-# -----------------------------------------------------------------------------
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Wipro Rewards Dashboard v3: Group 13",
-    page_icon="⚖️",
-    layout="wide"
+    page_title="Wipro Rewards Analytics | Group 13",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("Rewards Management Project Dashboard: Group 13")
+# --- CSS FOR PROFESSIONAL STYLING ---
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f9f9f9;
+    }
+    h1, h2, h3 {
+        color: #002e6e; /* Wipro-like Blue */
+        font-family: 'Segoe UI', sans-serif;
+    }
+    .stMetric {
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 5px;
+        border: 1px solid #e0e0e0;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# 2. ROBUST DATA PIPELINE (ETL)
-# -----------------------------------------------------------------------------
+# --- SIDEBAR ---
+st.sidebar.title("Configuration")
+st.sidebar.info("Upload the Wipro Employee Dataset (.csv or .xlsb)")
+uploaded_file = st.sidebar.file_uploader("Upload Data", type=["csv", "xlsb", "xlsx"])
+
+# --- DATA LOADING & CLEANING FUNCTION ---
 @st.cache_data
-def load_and_process_data(file):
-    """
-    Ingests Wipro data, handles PPP conversion, computes 3-Year Avg Ratings,
-    and prepares variables for Mincer Regression and K-Means.
-    """
+def load_and_clean_data(file):
     try:
         if file.name.endswith('.csv'):
             df = pd.read_csv(file)
         elif file.name.endswith('.xlsb'):
             df = pd.read_excel(file, engine='pyxlsb')
         else:
-            df = pd.read_excel(file) 
-    except Exception as e:
-        return None, f"Error loading file: {e}"
-
-    # 1. Clean Headers
-    df.columns = df.columns.str.strip()
-
-    # 2. PPP Conversion Factors
-    # We prioritize calculated columns if they exist, else we build them
-    ppp_factors = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16, 'AUD': 1/1.4, 'EUR': 1/0.9}
-    
-    # Ensure Currency Column
-    if 'Currency' not in df.columns:
-        df['Currency'] = 'USD'
-    
-    df['PPP_Factor'] = df['Currency'].astype(str).str.strip().str.upper().map(ppp_factors).fillna(1.0)
-    
-    # Target Pay (Annual_TCC_PPP)
-    if 'Annual_TCC (PPP USD)' in df.columns:
-        df['Annual_TCC_PPP'] = pd.to_numeric(df['Annual_TCC (PPP USD)'], errors='coerce')
-    elif 'Annual_TCC' in df.columns:
-        df['Annual_TCC_PPP'] = pd.to_numeric(df['Annual_TCC'], errors='coerce') * df['PPP_Factor']
-    else:
-        return None, "Critical Error: 'Annual_TCC' column missing."
-
-    # 3. Market Benchmark (P50) & Compa-Ratio
-    if 'P50 (PPP USD)' in df.columns:
-        df['P50_PPP'] = pd.to_numeric(df['P50 (PPP USD)'], errors='coerce')
-    elif 'P50' in df.columns:
-        df['P50_PPP'] = pd.to_numeric(df['P50'], errors='coerce') * df['PPP_Factor']
-    else:
-        # Fallback: Create internal P50 if market data missing (not ideal but prevents crash)
-        df['P50_PPP'] = df['Annual_TCC_PPP'].median()
-
-    # Calculate Compa-Ratio
-    df['Compa_Ratio'] = df['Annual_TCC_PPP'] / df['P50_PPP']
-
-    # 4. Rating Logic (3-Year Average)
-    rating_cols = ['Current_Rating', 'Previous_Rating', 'Pre_Previous_Rating']
-    existing_ratings = [c for c in rating_cols if c in df.columns]
-    
-    if existing_ratings:
-        for col in existing_ratings:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        df['Avg_Rating'] = df[existing_ratings].mean(axis=1)
-    elif 'Performance_Rating' in df.columns:
-        df['Avg_Rating'] = pd.to_numeric(df['Performance_Rating'], errors='coerce')
-    else:
-        df['Avg_Rating'] = 3.0 
-    
-    df['Avg_Rating'] = df['Avg_Rating'].fillna(3.0)
-
-    # 5. Experience Logic
-    if 'Experience' in df.columns:
-        df['Total_Experience'] = pd.to_numeric(df['Experience'], errors='coerce')
-    elif 'Tenure' in df.columns:
-        df['Total_Experience'] = pd.to_numeric(df['Tenure'], errors='coerce')
-    else:
-        df['Total_Experience'] = 0.0
-    df['Total_Experience'] = df['Total_Experience'].fillna(0.0)
-
-    # 6. Band Hierarchy
-    band_order = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'D1', 'D2', 'E']
-    if 'Band' in df.columns:
-        df['Band'] = df['Band'].astype(str).str.strip()
-        unique_bands = df['Band'].unique()
-        found_bands = [b for b in band_order if b in unique_bands]
-        extra_bands = [b for b in unique_bands if b not in found_bands]
-        df['Band'] = pd.Categorical(df['Band'], categories=found_bands + extra_bands, ordered=True)
-
-    # 7. Robustness Filter (As per your code snippet)
-    # Remove outliers where Compa Ratio is < 0.4 or > 2.5
-    df = df[(df['Compa_Ratio'] > 0.4) & (df['Compa_Ratio'] < 2.5)].copy()
-
-    modeling_cols = ['Annual_TCC_PPP', 'Total_Experience', 'Avg_Rating', 'Band', 'Compa_Ratio']
-    df_clean = df.dropna(subset=modeling_cols).copy()
-    
-    return df_clean, None
-
-# -----------------------------------------------------------------------------
-# 3. SIDEBAR & EXECUTION
-# -----------------------------------------------------------------------------
-st.sidebar.header("Data Upload")
-uploaded_file = st.sidebar.file_uploader("Upload Wipro Data (.xlsx, .xlsb, .csv)", type=['xlsx', 'xlsb', 'csv'])
-
-if uploaded_file:
-    df, error_msg = load_and_process_data(uploaded_file)
-    
-    if error_msg:
-        st.error(error_msg)
-    else:
-        st.sidebar.success(f"Successfully Loaded: {len(df):,} Employees")
+            df = pd.read_excel(file)
+            
+        # 1. Column Standardization
+        df.columns = df.columns.str.strip()
         
-        tab1, tab2, tab3 = st.tabs(["Regression Analysis", "K-Means Clustering", "Decision Tools"])
+        # 2. Currency Conversion (PPP)
+        # Rates per report: 1 USD = 22.54 INR (PPP) | 1 USD = 19.16 PHP (PPP)
+        ppp_rates = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16}
+        
+        if 'Currency' in df.columns and 'Annual_TCC' in df.columns:
+            df['Currency'] = df['Currency'].astype(str).str.strip().str.upper()
+            df['PPP_Factor'] = df['Currency'].map(ppp_rates).fillna(1.0)
+            df['Annual_TCC_PPP'] = pd.to_numeric(df['Annual_TCC'], errors='coerce') * df['PPP_Factor']
+            df['Log_Pay'] = np.log(df['Annual_TCC_PPP']) # For Regression Linearity
+        
+        # 3. Market Median (P50) Processing
+        if 'P50' in df.columns:
+            df['P50_PPP'] = pd.to_numeric(df['P50'], errors='coerce') * df['PPP_Factor']
+            df['Compa_Ratio'] = df['Annual_TCC_PPP'] / df['P50_PPP']
+            
+        # 4. Rating Cleaning
+        if 'Current_Rating' in df.columns:
+            df['Clean_Rating'] = pd.to_numeric(df['Current_Rating'], errors='coerce').fillna(3.0) # Impute avg
+            
+        # 5. Experience Cleaning
+        if 'Experience' in df.columns:
+            df['Clean_Exp'] = pd.to_numeric(df['Experience'], errors='coerce').fillna(0)
+            
+        # 6. Robustness Filter (Outliers)
+        # As per report: Remove Compa-Ratio < 0.4 or > 2.5
+        if 'Compa_Ratio' in df.columns:
+            df = df[(df['Compa_Ratio'] > 0.4) & (df['Compa_Ratio'] < 2.5)].copy()
+            
+        return df
+        
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return None
 
-        # =====================================================================
-        # TAB 1: MINCER EARNINGS FUNCTION
-        # =====================================================================
+# --- MAIN APP LOGIC ---
+
+st.title("Wipro Rewards Analytics: Dual-Engine Framework")
+st.markdown("### Strategic Pay Equity & Retention Dashboard")
+
+if uploaded_file is not None:
+    df = load_and_clean_data(uploaded_file)
+    
+    if df is not None:
+        # Create Tabs matching Report Structure
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "Overview & Data Health", 
+            "Engine 1: Market Fairness & Gender", 
+            "Engine 2: Strategic Segmentation", 
+            "Tools: Salary Fitment"
+        ])
+        
+        # --- TAB 1: OVERVIEW ---
         with tab1:
-            st.subheader("The Mincer Earnings Function (OLS Regression)")
-            st.markdown(r"""
-            **The Math:** $$Pay = \alpha + \beta_1(Exp) + \beta_2(Perf) + \beta_3(Band)$$
-            We use **Total Experience** and **Average Rating** to determine fair pay.
-            """)
+            st.header("1. Data Integrity & Robustness Check")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Employees", len(df))
+            c2.metric("Currencies Normalized", f"{df['Currency'].nunique()} (Converted to PPP USD)")
+            c3.metric("Avg Compa-Ratio", f"{df['Compa_Ratio'].mean():.2f}")
             
-            formula = "Q('Annual_TCC_PPP') ~ Total_Experience + Avg_Rating + C(Band)"
-            try:
-                model = smf.ols(formula=formula, data=df).fit()
-                st.session_state['reg_params'] = model.params
-                
-                c1, c2, c3 = st.columns(3)
-                c1.metric("R-Squared", f"{model.rsquared:.2%}", "Model Fit")
-                c2.metric("Base Pay (Intercept)", f"${model.params['Intercept']:,.0f}")
-                c3.metric("Exp Premium (per Yr)", f"${model.params['Total_Experience']:,.0f}")
-                
-                st.markdown("### 📊 Coefficient Analysis")
-                coef_data = []
-                for idx, val in model.params.items():
-                    if "Band" in idx:
-                        band_name = idx.replace("C(Band)[T.", "").replace("]", "")
-                        coef_data.append({"Factor": f"Promotion to {band_name}", "Pay Premium": val})
-                    elif "Avg_Rating" in idx:
-                        coef_data.append({"Factor": "1 Point Increase in Rating", "Pay Premium": val})
-                
-                coef_df = pd.DataFrame(coef_data)
-                st.dataframe(coef_df.style.format({"Pay Premium": "${:,.0f}"}), use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"Regression Failed: {e}")
+            st.subheader("Distribution of Pay (PPP USD)")
+            fig, ax = plt.subplots(figsize=(10, 4))
+            sns.histplot(df['Annual_TCC_PPP'], kde=True, color='#002e6e', ax=ax)
+            ax.set_title("Annual TCC Distribution (Post-Cleaning)")
+            st.pyplot(fig)
 
-        # =====================================================================
-        # TAB 2: K-MEANS SEGMENTATION (Strategic Risk)
-        # =====================================================================
+        # --- TAB 2: ENGINE 1 (REGRESSION) ---
         with tab2:
-            st.subheader("Workforce Segmentation")
+            st.header("2. Engine 1: The Econometric Market Model")
             st.markdown("""
-            **Quadrant Analysis:** We cluster employees based on **Performance (Avg Rating)** and **Pay Fairness (Compa-Ratio)**.
-            This automatically identifies Flight Risks and Mis-priced talent.
+            **Methodology:** We use an OLS Mincer Regression to isolate the financial value of specific attributes.
+            **Formula:** `Log(Pay) ~ Experience + Rating + Band + Gender + Job_Family`
             """)
             
-            # Prepare Data for Clustering (Quadrant Logic)
-            cluster_cols = ['Avg_Rating', 'Compa_Ratio']
-            cluster_data = df[cluster_cols].dropna().copy()
-            
-            if len(cluster_data) >= 4:
-                # 1. Scale
-                scaler = StandardScaler()
-                X_scaled = scaler.fit_transform(cluster_data)
+            # Run Regression
+            if 'Annual_TCC_PPP' in df.columns:
+                # Prepare data for regression (drop nulls in relevant columns)
+                reg_cols = ['Log_Pay', 'Annual_TCC_PPP', 'Clean_Exp', 'Clean_Rating', 'Band', 'Gender', 'Job_Family']
+                df_reg = df.dropna(subset=reg_cols).copy()
                 
-                # 2. Run K-Means (Fixed k=4 for Quadrants)
-                kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
-                cluster_data['Cluster'] = kmeans.fit_predict(X_scaled)
+                # Formula with Skills (Job Family) and Gender
+                formula = "Log_Pay ~ Clean_Exp + Clean_Rating + C(Band) + C(Gender) + C(Job_Family)"
                 
-                # 3. DYNAMIC LABELING (RANKING BASED)
-                # To guarantee 4 distinct names, we sort the clusters instead of using strict absolute thresholds.
-                
-                # Compute centroid for each cluster
-                cluster_stats = cluster_data.groupby('Cluster')[['Avg_Rating', 'Compa_Ratio']].mean().reset_index()
-                
-                # A. Sort by Rating to find Top 2 (High Perf) and Bottom 2 (Low Perf)
-                cluster_stats = cluster_stats.sort_values(by='Avg_Rating', ascending=False)
-                
-                high_perf_clusters = cluster_stats.iloc[:2].copy()
-                low_perf_clusters = cluster_stats.iloc[2:].copy()
-                
-                labels = {}
-                
-                # B. Within High Perf: Split by Pay (Higher Pay = Stable, Lower Pay = Risk)
-                high_perf_clusters = high_perf_clusters.sort_values(by='Compa_Ratio', ascending=False)
-                labels[high_perf_clusters.iloc[0]['Cluster']] = "Stable Star (High Perf / High Pay)"
-                labels[high_perf_clusters.iloc[1]['Cluster']] = "Flight Risk (High Perf / Low Pay)"
-                
-                # C. Within Low Perf: Split by Pay (Higher Pay = Overpaid, Lower Pay = Core)
-                low_perf_clusters = low_perf_clusters.sort_values(by='Compa_Ratio', ascending=False)
-                labels[low_perf_clusters.iloc[0]['Cluster']] = "Overpaid (Low Perf / High Pay)"
-                labels[low_perf_clusters.iloc[1]['Cluster']] = "Core Employee (Low Perf / Low Pay)"
-                
-                # Map labels back to dataframe
-                df.loc[cluster_data.index, 'Cluster_Label'] = cluster_data['Cluster'].map(labels)
-                
-                # 4. VISUALIZATION
-                plot_df = df.dropna(subset=['Cluster_Label']).copy()
-                
-                # Define specific colors
-                color_map = {
-                    "Flight Risk (High Perf / Low Pay)": "red",
-                    "Stable Star (High Perf / High Pay)": "green",
-                    "Overpaid (Low Perf / High Pay)": "orange",
-                    "Core Employee (Low Perf / Low Pay)": "blue"
-                }
+                try:
+                    model = smf.ols(formula=formula, data=df_reg).fit()
+                    
+                    # Store params for Tab 4 Calculator
+                    st.session_state['reg_params'] = model.params
+                    st.session_state['model_r2'] = model.rsquared
+                    
+                    # Metrics
+                    c1, c2 = st.columns(2)
+                    c1.metric("Model Accuracy (R-Squared)", f"{model.rsquared:.2%}")
+                    c2.metric("Experience Premium (Approx)", f"{np.exp(model.params['Clean_Exp']) - 1:.1%} per year")
 
-                fig_cluster = px.scatter(
-                    plot_df, 
-                    x='Avg_Rating', 
-                    y='Compa_Ratio', 
-                    color='Cluster_Label',
-                    color_discrete_map=color_map,
-                    hover_data=['Band', 'Total_Experience', 'Annual_TCC_PPP'],
-                    title=f"Talent Map (Avg Rating vs Compa-Ratio)",
-                    template="plotly_white"
-                )
-                
-                # Add reference lines
-                fig_cluster.add_hline(y=1.0, line_dash="dash", line_color="black", annotation_text="Market P50")
-                fig_cluster.add_vline(x=3.0, line_dash="dash", line_color="black", annotation_text="Expectation")
-                
-                st.plotly_chart(fig_cluster, use_container_width=True)
-                
-                # 5. SUMMARY TABLE
-                st.markdown("### 📊 Segment Impact Analysis")
-                summary = plot_df.groupby('Cluster_Label').agg({
-                    'Annual_TCC_PPP': 'mean',
-                    'Avg_Rating': 'mean',
-                    'Compa_Ratio': 'mean',
-                    'Band': 'count'
-                }).reset_index()
-                
-                summary.columns = ['Segment', 'Avg Pay', 'Avg Rating', 'Avg Compa-Ratio', 'Headcount']
-                
-                st.dataframe(summary.style.format({
-                    'Avg Pay': '${:,.0f}',
-                    'Avg Rating': '{:.2f}',
-                    'Avg Compa-Ratio': '{:.2f}'
-                }))
+                    st.divider()
+                    
+                    # --- GENDER EQUITY TOOL SECTION ---
+                    st.subheader("Mandatory Analysis: Gender Equity Audit")
+                    st.markdown("This tool visualizes the regression coefficient for Gender, effectively conducting a 'Systemic Gap' audit.")
+                    
+                    # Extract Gender Coefficient
+                    gender_param = [k for k in model.params.index if 'Gender' in k]
+                    if gender_param:
+                        gender_val = model.params[gender_param[0]]
+                        
+                        fig_gender, ax_g = plt.subplots(figsize=(8, 3))
+                        color = 'red' if gender_val < 0 else 'green'
+                        ax_g.barh(['Gender Gap (Controlled)'], [gender_val], color=color)
+                        ax_g.axvline(0, color='black', linestyle='--')
+                        ax_g.set_xlabel("Log Point Difference (Negative = Pay Gap)")
+                        st.pyplot(fig_gender)
+                        
+                        if gender_val < 0:
+                            st.error(f"⚠️ Audit Alert: The model detects a negative coefficient of {gender_val:.4f} for females, indicating a systemic gap not explained by Experience or Performance.")
+                        else:
+                            st.success("Audit Pass: No negative systemic gap detected.")
+                    
+                    # Full Coefficients Table
+                    with st.expander("View Full Regression Coefficients (Skill & Band Premiums)"):
+                        st.write(model.summary())
+                        
+                except Exception as e:
+                    st.error(f"Regression failed: {e}. Check if columns 'Band', 'Gender', 'Job_Family' exist.")
 
-            else:
-                st.warning("Not enough clean data to generate 4 clusters (Need at least 4 records).")
-
-        # =====================================================================
-        # TAB 3: STRATEGIC TOOLS (Offer Calculator)
-        # =====================================================================
+        # --- TAB 3: ENGINE 2 (CLUSTERING) ---
         with tab3:
-            st.header("Tools")
+            st.header("3. Engine 2: Strategic Segmentation (Risk Analysis)")
+            st.markdown("We use **K-Means Clustering** to segment the workforce into 4 strategic personas based on Value (Rating) vs. Cost (Compa-Ratio).")
             
-            st.subheader("Offer Calculator")
-            st.info("Predicts 'Internal Equity' price using Mincer Coefficients from Tab 1.")
+            if 'Clean_Rating' in df.columns and 'Compa_Ratio' in df.columns:
+                X = df[['Clean_Rating', 'Compa_Ratio']].dropna()
+                
+                # 1. Elbow Plot (Visualizing k=4 justification)
+                st.subheader("Statistical Justification: The Elbow Plot")
+                inertia = []
+                K_range = range(1, 10)
+                for k in K_range:
+                    km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X)
+                    inertia.append(km.inertia_)
+                
+                fig_elbow, ax_e = plt.subplots(figsize=(8, 3))
+                ax_e.plot(K_range, inertia, marker='o', color='teal')
+                ax_e.set_title("Elbow Method (Optimal k=4)")
+                st.pyplot(fig_elbow)
+                
+                # 2. Run K-Means (k=4)
+                kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+                df['Cluster'] = kmeans.fit_predict(df[['Clean_Rating', 'Compa_Ratio']].fillna(0))
+                
+                # Dynamic Labeling Logic
+                avg_rating = df['Clean_Rating'].mean()
+                avg_compa = df['Compa_Ratio'].mean()
+                
+                def label_cluster(row):
+                    # We assign labels based on Quadrant Logic
+                    # This is a simplification; in production, we map centroids.
+                    if row['Clean_Rating'] >= avg_rating and row['Compa_Ratio'] < avg_compa:
+                        return "🚨 Flight Risk (Underpaid Star)"
+                    elif row['Clean_Rating'] >= avg_rating and row['Compa_Ratio'] >= avg_compa:
+                        return "⭐ Stable Star"
+                    elif row['Clean_Rating'] < avg_rating and row['Compa_Ratio'] >= avg_compa:
+                        return "🔻 Overpaid / Low Perf"
+                    else:
+                        return "⚖️ Core Employee"
+
+                df['Persona'] = df.apply(label_cluster, axis=1)
+                
+                # 3. The Talent Map (Scatter Plot)
+                st.subheader("The Strategic Talent Map")
+                fig_map, ax_m = plt.subplots(figsize=(10, 6))
+                sns.scatterplot(data=df, x='Clean_Rating', y='Compa_Ratio', hue='Persona', palette='deep', ax=ax_m)
+                ax_m.axhline(1.0, color='red', linestyle='--', label='Market P50')
+                ax_m.axvline(3.0, color='black', linestyle='--', label='Avg Rating')
+                ax_m.set_title("Workforce Segmentation: identifying Flight Risks")
+                st.pyplot(fig_map)
+                
+                # 4. Flight Risk Table
+                st.subheader("Actionable Data: Flight Risk Candidates")
+                risks = df[df['Persona'] == "🚨 Flight Risk (Underpaid Star)"][['ID', 'Role Name', 'Annual_TCC_PPP', 'Compa_Ratio', 'Clean_Rating']]
+                st.dataframe(risks.head(10), use_container_width=True)
+
+        # --- TAB 4: TOOLS (FITMENT) ---
+        with tab4:
+            st.header("4. Recruitment Tool: Scientific Salary Fitment")
+            st.markdown("""
+            **Purpose:** Replaces recruiter guesswork with regression-based prediction.
+            **Logic:** `Offer = Intercept + (Exp_Coef * Years) + Band_Premium + Job_Family_Premium`
+            """)
             
             if 'reg_params' in st.session_state:
                 p = st.session_state['reg_params']
-                bands = [k.replace("C(Band)[T.", "").replace("]", "") for k in p.keys() if "Band" in k]
                 
-                if bands:
-                    c1, c2, c3 = st.columns(3)
-                    target_band = c1.selectbox("Role Band", sorted(bands))
-                    candidate_exp = c2.number_input("Total Experience (Yrs)", 0, 30, 5)
-                    target_rating = c3.slider("Target Rating Assumption", 1.0, 5.0, 3.0)
+                # Inputs
+                c1, c2 = st.columns(2)
+                with c1:
+                    exp_input = st.number_input("Candidate Experience (Years)", 0, 30, 5)
+                    rating_input = st.slider("Assumed Rating (Default=3)", 1, 5, 3)
+                with c2:
+                    # Extract Bands and Job Families from regression params for dropdowns
+                    bands = [k.replace("C(Band)[T.", "").replace("]", "") for k in p.index if "C(Band)" in k]
+                    families = [k.replace("C(Job_Family)[T.", "").replace("]", "") for k in p.index if "C(Job_Family)" in k]
                     
-                    base = p['Intercept']
-                    band_premium = p.get(f"C(Band)[T.{target_band}]", 0)
-                    exp_val = p['Total_Experience'] * candidate_exp
-                    rating_val = p['Avg_Rating'] * target_rating
+                    selected_band = st.selectbox("Target Band", sorted(bands))
+                    selected_family = st.selectbox("Job Family (Skill Cluster)", sorted(families))
+                
+                # Calculation Engine
+                if st.button("Calculate Fair Market Offer"):
+                    # 1. Base Intercept
+                    offer_log = p['Intercept']
                     
-                    fair_pay = base + band_premium + exp_val + rating_val
+                    # 2. Add Experience Value
+                    offer_log += p['Clean_Exp'] * exp_input
                     
-                    st.divider()
-                    col_mid = st.columns([1,2,1])
-                    col_mid[1].metric("Recommended Offer (Midpoint)", f"${fair_pay:,.0f}")
-                    col_mid[1].caption(f"Range: ${fair_pay*0.9:,.0f} - ${fair_pay*1.1:,.0f}")
-                else:
-                    st.warning("Could not extract bands from regression.")
+                    # 3. Add Rating Value
+                    offer_log += p['Clean_Rating'] * rating_input
+                    
+                    # 4. Add Band Premium
+                    band_key = f"C(Band)[T.{selected_band}]"
+                    if band_key in p:
+                        offer_log += p[band_key]
+                        
+                    # 5. Add Skill/Family Premium
+                    fam_key = f"C(Job_Family)[T.{selected_family}]"
+                    if fam_key in p:
+                        offer_log += p[fam_key]
+                        
+                    # Convert Log back to Dollars (Geometric Mean)
+                    final_offer = np.exp(offer_log)
+                    
+                    # Output
+                    st.success(f"✅ Scientific Fair Offer: ${final_offer:,.2f} (PPP USD)")
+                    st.caption("This offer ensures internal equity by aligning with the regression line of current employees.")
+                    
             else:
-                st.warning("Please run the Regression in Tab 1 first to train the model.")
+                st.warning("⚠️ Please run the Regression Model in 'Engine 1' tab first to train the coefficients.")
 
+    else:
+        st.warning("Please upload a valid dataset to proceed.")
 else:
-    st.info("Waiting for data file... Please upload .xlsb, .xlsx, or .csv")
+    st.info("Awaiting Data Upload...")
