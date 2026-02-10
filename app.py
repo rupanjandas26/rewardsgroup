@@ -45,6 +45,9 @@ st.markdown("""
     /* Tab Styling */
     .stTabs [data-baseweb="tab"] { color: #333333; }
     .stTabs [aria-selected="true"] { color: #002e6e; border-bottom-color: #002e6e; }
+    
+    /* Expander Styling */
+    .streamlit-expanderHeader { color: #002e6e; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -115,20 +118,56 @@ if uploaded_file is not None:
         # --- TAB 1: OVERVIEW ---
         with tab1:
             st.header("1. Data Integrity & Robustness Check")
-            c1, c2, c3 = st.columns(3)
+            
+            # Key Metrics Row
+            c1, c2, c3, c4 = st.columns(4)
             c1.metric("Total Employees", f"{len(df):,}")
-            c2.metric("Currencies Normalized", f"{df['Currency'].nunique()} (PPP USD)")
-            c3.metric("Avg Compa-Ratio", f"{df['Compa_Ratio'].mean():.2f}")
+            c2.metric("Avg Compa-Ratio", f"{df['Compa_Ratio'].mean():.2f}")
+            c3.metric("Avg Tenure", f"{df['Clean_Exp'].mean():.1f} Yrs")
+            unique_roles = df['Role Name'].nunique() if 'Role Name' in df.columns else 0
+            c4.metric("Unique Roles", unique_roles)
             
-            st.subheader("Distribution of Annual Pay (PPP USD)")
-            fig, ax = plt.subplots(figsize=(10, 4))
+            st.divider()
             
-            sns.histplot(df['Annual_TCC_PPP'], kde=True, color='#002e6e', ax=ax, edgecolor='black')
-            ax.set_title("Annual TCC Distribution (Post-Cleaning)", color='black', fontweight='bold')
-            ax.set_xlabel("Annual TCC (PPP USD)", color='black')
-            ax.set_ylabel("Frequency", color='black')
-            ax.tick_params(colors='black')
-            st.pyplot(fig)
+            # Row 1 of Visuals: Distributions
+            col_left, col_right = st.columns(2)
+            
+            with col_left:
+                st.subheader("A. Pay Distribution (PPP USD)")
+                fig, ax = plt.subplots(figsize=(8, 4))
+                sns.histplot(df['Annual_TCC_PPP'], kde=True, color='#002e6e', ax=ax, edgecolor='black')
+                ax.set_title("Are we paying competitively?", color='black', fontweight='bold')
+                ax.set_xlabel("Annual TCC", color='black')
+                ax.tick_params(colors='black')
+                st.pyplot(fig)
+                st.caption("A healthy distribution should be bell-shaped. Skewness indicates pay compression.")
+
+            with col_right:
+                st.subheader("B. Headcount by Band")
+                if 'Band' in df.columns:
+                    fig_band, ax_b = plt.subplots(figsize=(8, 4))
+                    band_counts = df['Band'].value_counts().sort_index()
+                    sns.barplot(x=band_counts.index, y=band_counts.values, color='#00c1de', ax=ax_b)
+                    ax_b.set_title("Organizational Shape (Pyramid Check)", color='black', fontweight='bold')
+                    ax_b.tick_params(colors='black')
+                    st.pyplot(fig_band)
+                    st.caption("Checks the hierarchy. Top-heavy orgs (Inverted Pyramid) have higher costs.")
+            
+            st.divider()
+
+            # Row 2 of Visuals: Boxplots
+            st.subheader("C. Internal Equity Check: Pay Spread by Band")
+            if 'Band' in df.columns:
+                fig_box, ax_box = plt.subplots(figsize=(10, 5))
+                # Sort bands if possible
+                bands_sorted = sorted(df['Band'].unique().astype(str))
+                sns.boxplot(data=df, x='Band', y='Annual_TCC_PPP', order=bands_sorted, palette='Blues', ax=ax_box)
+                ax_box.set_title("Pay Ranges & Overlaps", color='black', fontweight='bold')
+                ax_box.set_yscale('log') # Log scale handles wide pay ranges better
+                ax_box.set_ylabel("Annual Pay (Log Scale)", color='black')
+                ax_box.tick_params(colors='black')
+                st.pyplot(fig_box)
+                st.caption("This chart reveals if lower bands are overlapping too much with higher bands (Pay Compression).")
 
         # --- TAB 2: ENGINE 1 (REGRESSION) ---
         with tab2:
@@ -144,7 +183,6 @@ if uploaded_file is not None:
                 
                 if not missing_cols:
                     df_reg = df.dropna(subset=reg_cols).copy()
-                    
                     formula = "Log_Pay ~ Clean_Exp + Clean_Rating + C(Band) + C(Gender) + C(Job_Family)"
                     
                     try:
@@ -153,68 +191,58 @@ if uploaded_file is not None:
                         df_reg['Predicted_Log'] = model.predict(df_reg)
                         df_reg['Predicted_Pay'] = np.exp(df_reg['Predicted_Log'])
                         
-                        c1, c2 = st.columns(2)
-                        c1.metric("Model Accuracy (R-Squared)", f"{model.rsquared:.2%}")
-                        c2.metric("Experience Premium", f"{np.exp(model.params['Clean_Exp']) - 1:.1%} per year")
+                        # --- GENDER EQUITY TOOL ---
+                        st.subheader("Mandatory Analysis: Gender Equity Audit")
+                        
+                        col_g_chart, col_g_text = st.columns([2, 1])
+                        
+                        gender_param = [k for k in model.params.index if 'Gender' in k]
+                        
+                        with col_g_chart:
+                            if gender_param:
+                                gender_val = model.params[gender_param[0]]
+                                fig_gender, ax_g = plt.subplots(figsize=(8, 4))
+                                color = '#d62728' if gender_val < 0 else '#6cc24a'
+                                ax_g.barh(['Gender Gap (Controlled)'], [gender_val], color=color)
+                                ax_g.axvline(0, color='black', linestyle='--')
+                                ax_g.set_xlabel("Log Point Difference", color='black', fontweight='bold')
+                                ax_g.tick_params(colors='black')
+                                ax_g.text(gender_val, 0, f" {gender_val:.4f}", va='center', fontweight='bold', color='black')
+                                st.pyplot(fig_gender)
+
+                        with col_g_text:
+                            st.markdown("#### 📘 How to Read This")
+                            if gender_val < 0:
+                                st.error(f"**Systemic Gap Detected: {gender_val:.1%}**")
+                                st.markdown(f"""
+                                This means that after we control for Experience, Band, and Role, **Female employees are still paid {abs(gender_val):.1%} less** than men. 
+                                
+                                **Action:** HR must audit the 'Outliers' in the Flight Risk tab to ensure no bias in historical hiring offers.
+                                """)
+                            else:
+                                st.success("**No Systemic Bias**")
+                                st.markdown("The model shows no statistical penalty for gender. Any raw pay gaps are likely due to legitimate factors (e.g., more men in senior bands).")
 
                         st.divider()
-                        
-                        # --- NEW VISUAL 1: ACTUAL VS PREDICTED (PRIP Check) ---
-                        st.subheader("Model Validation: Actual vs Predicted Pay")
-                        st.markdown("Points above the line indicate employees paid *more* than the model predicts (Positive PRIP).")
-                        
-                        fig_prip, ax_p = plt.subplots(figsize=(10, 5))
-                        sns.scatterplot(x=df_reg['Predicted_Pay'], y=df_reg['Annual_TCC_PPP'], alpha=0.3, color='#00c1de', ax=ax_p)
-                        # Add 45-degree reference line
-                        max_val = max(df_reg['Predicted_Pay'].max(), df_reg['Annual_TCC_PPP'].max())
-                        ax_p.plot([0, max_val], [0, max_val], color='#d62728', linestyle='--')
-                        
-                        ax_p.set_title("Actual Pay vs Market Fair Pay", color='black', fontweight='bold')
-                        ax_p.set_xlabel("Predicted 'Fair' Pay (Model)", color='black')
-                        ax_p.set_ylabel("Actual Pay", color='black')
-                        ax_p.tick_params(colors='black')
-                        st.pyplot(fig_prip)
-                        
-                        st.divider()
 
-                        # --- NEW VISUAL 2: SKILL HETEROGENEITY (Job Family Premiums) ---
+                        # --- SKILL HETEROGENEITY ---
                         st.subheader("Skill Analysis: Job Family Premiums")
-                        st.markdown("Visualizing the 'Cost of Skill' - How much does each job family pay relative to the baseline?")
                         
-                        # Extract Job Family Coefficients
                         jf_params = {k.replace("C(Job_Family)[T.", "").replace("]", ""): v 
                                      for k, v in model.params.items() if "Job_Family" in k}
                         
                         if jf_params:
                             df_jf = pd.DataFrame(list(jf_params.items()), columns=['Job Family', 'Coefficient'])
-                            df_jf = df_jf.sort_values('Coefficient', ascending=False).head(10) # Top 10
+                            df_jf = df_jf.sort_values('Coefficient', ascending=False).head(10)
                             
                             fig_skill, ax_s = plt.subplots(figsize=(10, 5))
                             sns.barplot(data=df_jf, x='Coefficient', y='Job Family', palette='viridis', ax=ax_s)
-                            ax_s.set_title("Top 10 High-Value Skill Clusters (Regression Coefficients)", color='black', fontweight='bold')
-                            ax_s.set_xlabel("Premium (Log Points)", color='black')
-                            ax_s.set_ylabel("Job Family", color='black')
+                            ax_s.set_title("Top 10 High-Value Skill Clusters", color='black', fontweight='bold')
+                            ax_s.set_xlabel("Premium above Baseline", color='black')
                             ax_s.tick_params(colors='black')
                             st.pyplot(fig_skill)
-                        
-                        st.divider()
+                            st.caption("This proves we are not treating all 'Bands' the same. The model prices specific skills (e.g., Architecture) higher than others.")
 
-                        # --- GENDER EQUITY TOOL ---
-                        st.subheader("Mandatory Analysis: Gender Equity Audit")
-                        gender_param = [k for k in model.params.index if 'Gender' in k]
-                        if gender_param:
-                            gender_val = model.params[gender_param[0]]
-                            
-                            fig_gender, ax_g = plt.subplots(figsize=(10, 3))
-                            color = '#d62728' if gender_val < 0 else '#6cc24a'
-                            ax_g.barh(['Gender Gap (Controlled)'], [gender_val], color=color)
-                            ax_g.axvline(0, color='black', linestyle='--')
-                            ax_g.set_xlabel("Log Point Difference (Negative = Pay Gap)", color='black', fontweight='bold')
-                            ax_g.set_title("Systemic Gender Pay Gap Audit", color='black', fontweight='bold')
-                            ax_g.tick_params(colors='black')
-                            ax_g.text(gender_val, 0, f" {gender_val:.4f}", va='center', fontweight='bold', color='black')
-                            st.pyplot(fig_gender)
-                            
                     except Exception as e:
                          st.error(f"Regression Error: {e}")
                 else:
@@ -228,23 +256,7 @@ if uploaded_file is not None:
             if 'Clean_Rating' in df.columns and 'Compa_Ratio' in df.columns:
                 X = df[['Clean_Rating', 'Compa_Ratio']].dropna()
                 
-                # 1. Elbow Plot
-                st.subheader("Statistical Justification: The Elbow Plot")
-                inertia = []
-                K_range = range(1, 10)
-                for k in K_range:
-                    km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X)
-                    inertia.append(km.inertia_)
-                
-                fig_elbow, ax_e = plt.subplots(figsize=(8, 3))
-                ax_e.plot(K_range, inertia, marker='o', color='#002e6e', linewidth=2)
-                ax_e.set_title("Elbow Method (Optimal k=4)", color='black', fontweight='bold')
-                ax_e.set_xlabel("Number of Clusters (k)", color='black')
-                ax_e.set_ylabel("Inertia", color='black')
-                ax_e.tick_params(colors='black')
-                st.pyplot(fig_elbow)
-                
-                # 2. Run K-Means (k=4)
+                # Run K-Means (k=4)
                 kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
                 df['Cluster'] = kmeans.fit_predict(df[['Clean_Rating', 'Compa_Ratio']].fillna(0))
                 
@@ -264,7 +276,7 @@ if uploaded_file is not None:
 
                 df['Persona'] = df.apply(label_cluster, axis=1)
                 
-                # 3. Talent Map
+                # Talent Map
                 st.subheader("The Strategic Talent Map")
                 fig_map, ax_m = plt.subplots(figsize=(10, 6))
                 
@@ -281,35 +293,46 @@ if uploaded_file is not None:
                 
                 ax_m.axhline(1.0, color='#d62728', linestyle='--', linewidth=2, label='Market P50')
                 ax_m.axvline(3.0, color='black', linestyle='--', linewidth=2, label='Avg Rating')
-                ax_m.set_title("Workforce Segmentation: Identifying Flight Risks", color='black', fontweight='bold')
+                ax_m.set_title("Workforce Segmentation", color='black', fontweight='bold')
                 ax_m.set_xlabel("Performance Rating", color='black')
-                ax_m.set_ylabel("Compa-Ratio (Pay Competitiveness)", color='black')
+                ax_m.set_ylabel("Compa-Ratio", color='black')
                 ax_m.tick_params(colors='black')
                 ax_m.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 st.pyplot(fig_map)
                 
-                # 4. NEW VISUAL: FINANCIAL IMPACT (ROI)
-                st.subheader("Financial Impact: Retention ROI")
-                st.markdown("Comparing the cost of fixing the 'Flight Risk' cluster vs. the cost of replacing them (Attrition).")
+                st.divider()
+
+                # --- FINANCIAL IMPACT (ROI) ---
+                st.subheader("Financial Impact: Retention ROI Analysis")
+                
+                col_roi_chart, col_roi_text = st.columns([2, 1])
                 
                 risks = df[df['Persona'] == "Flight Risk (Underpaid Star)"]
                 total_correction_cost = (risks['P50_PPP'] - risks['Annual_TCC_PPP']).sum()
-                total_attrition_cost = risks['Annual_TCC_PPP'].sum() * 1.5 # Assumption: 1.5x salary to replace
+                total_attrition_cost = risks['Annual_TCC_PPP'].sum() * 1.5 
                 
-                roi_data = pd.DataFrame({
-                    'Cost Type': ['Correction Budget (Retention)', 'Replacement Cost (Attrition)'],
-                    'Amount (USD)': [total_correction_cost, total_attrition_cost]
-                })
+                with col_roi_chart:
+                    roi_data = pd.DataFrame({
+                        'Cost Type': ['Correction (Retention)', 'Replacement (Attrition)'],
+                        'Amount (USD)': [total_correction_cost, total_attrition_cost]
+                    })
+                    
+                    fig_roi, ax_r = plt.subplots(figsize=(8, 4))
+                    sns.barplot(data=roi_data, y='Cost Type', x='Amount (USD)', palette=['#6cc24a', '#d62728'], ax=ax_r)
+                    ax_r.set_title("Cost of Action vs Inaction", color='black', fontweight='bold')
+                    ax_r.tick_params(colors='black')
+                    st.pyplot(fig_roi)
                 
-                fig_roi, ax_r = plt.subplots(figsize=(8, 4))
-                sns.barplot(data=roi_data, y='Cost Type', x='Amount (USD)', palette=['#6cc24a', '#d62728'], ax=ax_r)
-                ax_r.set_title("ROI Analysis: Why We Must Act", color='black', fontweight='bold')
-                ax_r.set_xlabel("Total Cost (PPP USD)", color='black')
-                ax_r.set_ylabel("")
-                ax_r.tick_params(colors='black')
-                st.pyplot(fig_roi)
-
-                st.info(f"Analysis shows it is {total_attrition_cost/total_correction_cost:.1f}x cheaper to retain these employees than to replace them.")
+                with col_roi_text:
+                    st.markdown("#### 📘 Business Context")
+                    st.markdown(f"""
+                    **The Logic:**
+                    * **Correction Cost:** The exact budget needed to raise these specific "Underpaid Stars" to the Market Median.
+                    * **Replacement Cost:** Industry standard (1.5x Salary). Includes Agency Fees, Onboarding (3-6mo), and Lost Productivity.
+                    
+                    **Verdict:**
+                    It is **{total_attrition_cost/total_correction_cost:.1f}x cheaper** to fix their pay now than to let them leave.
+                    """)
 
         # --- TAB 4: TOOLS (FITMENT) ---
         with tab4:
