@@ -14,15 +14,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL VISUALIZATION SETTINGS ---
-# Force a clean, white background for all plots to ensure readability
-sns.set_theme(style="whitegrid", font_scale=1.1)
+# --- CRITICAL VISUALIZATION FIX ---
+# Force everything to be black text on white background
+sns.set_theme(style="whitegrid")
 plt.rcParams['figure.facecolor'] = 'white'
 plt.rcParams['axes.facecolor'] = 'white'
-plt.rcParams['text.color'] = '#333333'
-plt.rcParams['axes.labelcolor'] = '#333333'
-plt.rcParams['xtick.color'] = '#333333'
-plt.rcParams['ytick.color'] = '#333333'
+plt.rcParams['text.color'] = 'black'          # Force Text Black
+plt.rcParams['axes.labelcolor'] = 'black'     # Force Labels Black
+plt.rcParams['xtick.color'] = 'black'         # Force X-Ticks Black
+plt.rcParams['ytick.color'] = 'black'         # Force Y-Ticks Black
+plt.rcParams['font.family'] = 'sans-serif'
 
 # --- CSS FOR PROFESSIONAL STYLING ---
 st.markdown("""
@@ -42,20 +43,9 @@ st.markdown("""
         border-left: 5px solid #002e6e;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #ffffff;
-        border-radius: 4px;
-        color: #555;
-        font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #002e6e;
-        color: #ffffff;
+    /* Fix for Streamlit's dark mode clashing with plots */
+    .stPlot {
+        background-color: white;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -76,36 +66,28 @@ def load_and_clean_data(file):
         else:
             df = pd.read_excel(file)
             
-        # 1. Column Standardization
         df.columns = df.columns.str.strip()
         
-        # 2. Currency Conversion (PPP)
-        # Rates per report: 1 USD = 22.54 INR (PPP) | 1 USD = 19.16 PHP (PPP)
+        # Currency Conversion (PPP)
         ppp_rates = {'USD': 1.0, 'INR': 1/22.54, 'PHP': 1/19.16}
         
         if 'Currency' in df.columns and 'Annual_TCC' in df.columns:
             df['Currency'] = df['Currency'].astype(str).str.strip().str.upper()
             df['PPP_Factor'] = df['Currency'].map(ppp_rates).fillna(1.0)
             df['Annual_TCC_PPP'] = pd.to_numeric(df['Annual_TCC'], errors='coerce') * df['PPP_Factor']
-            # Log Pay for Regression Linearity
-            df = df[df['Annual_TCC_PPP'] > 0] # Remove zero/negative pay
+            df = df[df['Annual_TCC_PPP'] > 0]
             df['Log_Pay'] = np.log(df['Annual_TCC_PPP']) 
         
-        # 3. Market Median (P50) Processing
         if 'P50' in df.columns:
             df['P50_PPP'] = pd.to_numeric(df['P50'], errors='coerce') * df['PPP_Factor']
             df['Compa_Ratio'] = df['Annual_TCC_PPP'] / df['P50_PPP']
             
-        # 4. Rating Cleaning
         if 'Current_Rating' in df.columns:
-            df['Clean_Rating'] = pd.to_numeric(df['Current_Rating'], errors='coerce').fillna(3.0) # Impute avg
+            df['Clean_Rating'] = pd.to_numeric(df['Current_Rating'], errors='coerce').fillna(3.0)
             
-        # 5. Experience Cleaning
         if 'Experience' in df.columns:
             df['Clean_Exp'] = pd.to_numeric(df['Experience'], errors='coerce').fillna(0)
             
-        # 6. Robustness Filter (Outliers)
-        # As per report: Remove Compa-Ratio < 0.4 or > 2.5
         if 'Compa_Ratio' in df.columns:
             df = df[(df['Compa_Ratio'] > 0.4) & (df['Compa_Ratio'] < 2.5)].copy()
             
@@ -124,7 +106,6 @@ if uploaded_file is not None:
     df = load_and_clean_data(uploaded_file)
     
     if df is not None:
-        # Create Tabs matching Report Structure
         tab1, tab2, tab3, tab4 = st.tabs([
             "1. Overview & Data Health", 
             "2. Engine 1: Market Fairness & Gender", 
@@ -141,44 +122,38 @@ if uploaded_file is not None:
             c3.metric("Avg Compa-Ratio", f"{df['Compa_Ratio'].mean():.2f}")
             
             st.subheader("Distribution of Annual Pay (PPP USD)")
-            # Forced white background for plot
             fig, ax = plt.subplots(figsize=(10, 4))
+            # Explicitly force white background again just to be safe
             fig.patch.set_facecolor('white')
+            ax.set_facecolor('white')
             
-            sns.histplot(df['Annual_TCC_PPP'], kde=True, color='#002e6e', ax=ax, edgecolor='white')
-            ax.set_title("Annual TCC Distribution (Post-Cleaning)", fontweight='bold')
-            ax.set_xlabel("Annual TCC (PPP USD)")
-            ax.set_ylabel("Frequency")
+            sns.histplot(df['Annual_TCC_PPP'], kde=True, color='#002e6e', ax=ax, edgecolor='black')
+            ax.set_title("Annual TCC Distribution (Post-Cleaning)", color='black', fontweight='bold')
+            ax.set_xlabel("Annual TCC (PPP USD)", color='black')
+            ax.set_ylabel("Frequency", color='black')
+            ax.tick_params(colors='black')
             st.pyplot(fig)
 
         # --- TAB 2: ENGINE 1 (REGRESSION) ---
         with tab2:
             st.header("2. Engine 1: The Econometric Market Model")
             st.markdown("""
-            **Methodology:** OLS Mincer Regression to isolate financial value of attributes.
+            **Methodology:** OLS Mincer Regression.
             **Formula:** `Log(Pay) ~ Experience + Rating + Band + Gender + Job_Family`
             """)
             
             if 'Annual_TCC_PPP' in df.columns:
-                # Prepare data
                 reg_cols = ['Log_Pay', 'Annual_TCC_PPP', 'Clean_Exp', 'Clean_Rating', 'Band', 'Gender', 'Job_Family']
-                # Check if columns exist
                 missing_cols = [c for c in reg_cols if c not in df.columns and c != 'Log_Pay']
                 
                 if not missing_cols:
                     df_reg = df.dropna(subset=reg_cols).copy()
-                    
-                    # Formula
                     formula = "Log_Pay ~ Clean_Exp + Clean_Rating + C(Band) + C(Gender) + C(Job_Family)"
                     
                     try:
                         model = smf.ols(formula=formula, data=df_reg).fit()
-                        
-                        # Store params
                         st.session_state['reg_params'] = model.params
-                        st.session_state['model_r2'] = model.rsquared
                         
-                        # Metrics
                         c1, c2 = st.columns(2)
                         c1.metric("Model Accuracy (R-Squared)", f"{model.rsquared:.2%}")
                         c2.metric("Experience Premium", f"{np.exp(model.params['Clean_Exp']) - 1:.1%} per year")
@@ -187,7 +162,7 @@ if uploaded_file is not None:
                         
                         # --- GENDER EQUITY TOOL ---
                         st.subheader("Mandatory Analysis: Gender Equity Audit")
-                        st.markdown("Visualizing the regression coefficient for Gender (Systemic Gap Audit).")
+                        st.markdown("Visualizing the regression coefficient for Gender.")
                         
                         gender_param = [k for k in model.params.index if 'Gender' in k]
                         if gender_param:
@@ -195,31 +170,27 @@ if uploaded_file is not None:
                             
                             fig_gender, ax_g = plt.subplots(figsize=(10, 3))
                             fig_gender.patch.set_facecolor('white')
+                            ax_g.set_facecolor('white')
                             
-                            color = '#d62728' if gender_val < 0 else '#2ca02c' # Red if gap, Green if premium
+                            color = '#d62728' if gender_val < 0 else '#2ca02c'
                             ax_g.barh(['Gender Gap (Controlled)'], [gender_val], color=color)
                             ax_g.axvline(0, color='black', linestyle='--')
-                            ax_g.set_xlabel("Log Point Difference (Negative = Pay Gap)", fontweight='bold')
-                            ax_g.set_title("Systemic Gender Pay Gap Audit", fontweight='bold')
+                            ax_g.set_xlabel("Log Point Difference (Negative = Pay Gap)", color='black', fontweight='bold')
+                            ax_g.set_title("Systemic Gender Pay Gap Audit", color='black', fontweight='bold')
+                            ax_g.tick_params(colors='black')
                             
-                            # Add data label
-                            ax_g.text(gender_val, 0, f" {gender_val:.4f}", va='center', fontweight='bold')
-                            
+                            ax_g.text(gender_val, 0, f" {gender_val:.4f}", va='center', fontweight='bold', color='black')
                             st.pyplot(fig_gender)
                             
                             if gender_val < 0:
                                 st.error(f"Audit Alert: Negative coefficient ({gender_val:.4f}) detected for females.")
                             else:
                                 st.success("Audit Pass: No negative systemic gap detected.")
-                        
-                        # Coefficients Table
-                        with st.expander("View Full Regression Coefficients"):
-                            st.write(model.summary())
                             
                     except Exception as e:
                          st.error(f"Regression Error: {e}")
                 else:
-                    st.warning(f"Missing columns for regression: {missing_cols}")
+                    st.warning(f"Missing columns: {missing_cols}")
 
         # --- TAB 3: ENGINE 2 (CLUSTERING) ---
         with tab3:
@@ -239,12 +210,13 @@ if uploaded_file is not None:
                 
                 fig_elbow, ax_e = plt.subplots(figsize=(8, 3))
                 fig_elbow.patch.set_facecolor('white')
+                ax_e.set_facecolor('white')
                 
                 ax_e.plot(K_range, inertia, marker='o', color='#002e6e', linewidth=2)
-                ax_e.set_title("Elbow Method (Optimal k=4)", fontweight='bold')
-                ax_e.set_xlabel("Number of Clusters (k)")
-                ax_e.set_ylabel("Inertia")
-                ax_e.grid(True, linestyle='--', alpha=0.7)
+                ax_e.set_title("Elbow Method (Optimal k=4)", color='black', fontweight='bold')
+                ax_e.set_xlabel("Number of Clusters (k)", color='black')
+                ax_e.set_ylabel("Inertia", color='black')
+                ax_e.tick_params(colors='black')
                 st.pyplot(fig_elbow)
                 
                 # 2. Run K-Means (k=4)
@@ -271,8 +243,8 @@ if uploaded_file is not None:
                 st.subheader("The Strategic Talent Map")
                 fig_map, ax_m = plt.subplots(figsize=(10, 6))
                 fig_map.patch.set_facecolor('white')
+                ax_m.set_facecolor('white')
                 
-                # Use a high contrast palette
                 sns.scatterplot(
                     data=df, 
                     x='Clean_Rating', 
@@ -287,10 +259,11 @@ if uploaded_file is not None:
                 ax_m.axhline(1.0, color='#d62728', linestyle='--', linewidth=2, label='Market P50')
                 ax_m.axvline(3.0, color='black', linestyle='--', linewidth=2, label='Avg Rating')
                 
-                ax_m.set_title("Workforce Segmentation: Identifying Flight Risks", fontweight='bold')
-                ax_m.set_xlabel("Performance Rating")
-                ax_m.set_ylabel("Compa-Ratio (Pay Competitiveness)")
-                ax_m.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+                ax_m.set_title("Workforce Segmentation: Identifying Flight Risks", color='black', fontweight='bold')
+                ax_m.set_xlabel("Performance Rating", color='black')
+                ax_m.set_ylabel("Compa-Ratio (Pay Competitiveness)", color='black')
+                ax_m.tick_params(colors='black')
+                ax_m.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 
                 st.pyplot(fig_map)
                 
@@ -312,7 +285,6 @@ if uploaded_file is not None:
                     exp_input = st.number_input("Experience (Years)", 0, 30, 5)
                     rating_input = st.slider("Assumed Rating", 1, 5, 3)
                 with c2:
-                    # Parse Bands/Families from params
                     bands = [k.replace("C(Band)[T.", "").replace("]", "") for k in p.index if "C(Band)" in k]
                     families = [k.replace("C(Job_Family)[T.", "").replace("]", "") for k in p.index if "C(Job_Family)" in k]
                     
@@ -320,7 +292,6 @@ if uploaded_file is not None:
                     selected_family = st.selectbox("Job Family", sorted(families)) if families else None
                 
                 if st.button("Calculate Fair Market Offer"):
-                    # Calc Logic
                     offer_log = p['Intercept']
                     offer_log += p['Clean_Exp'] * exp_input
                     offer_log += p['Clean_Rating'] * rating_input
@@ -337,7 +308,6 @@ if uploaded_file is not None:
                     
                     st.success(f"Scientific Fair Offer: ${final_offer:,.2f} (PPP USD)")
                     st.info("Offer aligns with internal equity of current workforce.")
-                    
             else:
                 st.warning("Please run Regression in Tab 2 first.")
 
