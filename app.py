@@ -53,7 +53,7 @@ st.markdown("""
 
 # --- 4. SIDEBAR ---
 st.sidebar.title("Configuration")
-st.sidebar.info("Upload Wipro Employee Dataset")
+st.sidebar.info("Upload Wipro Employee Dataset (Note: After Upload, wait for a few minutes for the analysis to complete.)")
 uploaded_file = st.sidebar.file_uploader("Allowed formats: .csv, .xlsb, .xlsx", type=["csv", "xlsb", "xlsx"])
 
 # --- 5. DATA LOADING & CLEANING FUNCTION ---
@@ -101,8 +101,8 @@ def load_and_clean_data(file):
 
 # --- 6. MAIN APP LOGIC ---
 
-st.title("Wipro Rewards Analytics: Dual-Engine Framework")
-st.markdown("### Strategic Pay Equity & Retention Dashboard | Group 13")
+st.title("Wipro Rewards Analytics")
+st.markdown("### Group 13")
 
 if uploaded_file is not None:
     df = load_and_clean_data(uploaded_file)
@@ -112,7 +112,7 @@ if uploaded_file is not None:
             "1. Overview & Data Health", 
             "2. Engine 1: Market Fairness & Gender", 
             "3. Engine 2: Strategic Segmentation", 
-            "4. Tools: Salary Fitment"
+            "4. Salary Fitment Tool"
         ])
         
         # --- TAB 1: OVERVIEW ---
@@ -171,7 +171,7 @@ if uploaded_file is not None:
 
         # --- TAB 2: ENGINE 1 (REGRESSION) ---
         with tab2:
-            st.header("2. Engine 1: The Econometric Market Model")
+            st.header("Engine 1: The Econometric Market Model")
             st.markdown("""
             **Methodology:** OLS Mincer Regression.
             **Formula:** `Log(Pay) ~ Experience + Rating + Band + Gender + Job_Family`
@@ -286,7 +286,7 @@ if uploaded_file is not None:
 
         # --- TAB 3: ENGINE 2 (CLUSTERING) ---
         with tab3:
-            st.header("3. Engine 2: Strategic Segmentation")
+            st.header("Engine 2: Strategic Segmentation")
             st.markdown("K-Means Clustering: Segmenting by Value (Rating) vs. Cost (Compa-Ratio).")
             
             if 'Clean_Rating' in df.columns and 'Compa_Ratio' in df.columns:
@@ -372,7 +372,7 @@ if uploaded_file is not None:
 
         # --- TAB 4: TOOLS (FITMENT) ---
         with tab4:
-            st.header("4. Recruitment Tool: Scientific Salary Fitment")
+            st.header("Recruitment Tool: Scientific Salary Fitment")
             st.markdown("Predictive Calculator based on Regression Coefficients.")
             
             if 'reg_params' in st.session_state:
