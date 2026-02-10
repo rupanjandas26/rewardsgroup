@@ -9,7 +9,7 @@ import numpy as np
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Wipro Rewards Analytics | Group 13",
+    page_title="RM | Group 13",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -101,7 +101,7 @@ def load_and_clean_data(file):
 
 # --- 6. MAIN APP LOGIC ---
 
-st.title("Wipro Rewards Analytics")
+st.title("Reward Management Group Assignment: Wipro Analysis")
 st.markdown("### Group 13")
 
 if uploaded_file is not None:
