@@ -43,7 +43,7 @@ st.markdown("""
     h1, h2, h3 { color: #002e6e; font-family: 'Segoe UI', sans-serif; font-weight: 700; }
     
     /* Tab Styling */
-    .stTabs [data-baseweb="tab"] { color: #333333; }
+    .stTabs [data-baseweb="tab"] { color: #333333; font-weight: 600; }
     .stTabs [aria-selected="true"] { color: #002e6e; border-bottom-color: #002e6e; }
     
     /* Expander Styling */
@@ -194,6 +194,12 @@ if uploaded_file is not None:
                         # --- GENDER EQUITY TOOL ---
                         st.subheader("Mandatory Analysis: Gender Equity Audit")
                         
+                        # Explanation Block
+                        st.markdown("""
+                        **Business Relevance:** Simple comparisons of "Average Male Pay vs. Average Female Pay" are misleading because they don't account for Job Level or Experience. 
+                        This tool runs a **Controlled Regression Audit** to isolate the specific impact of Gender on Pay while holding all other factors constant.
+                        """)
+                        
                         col_g_chart, col_g_text = st.columns([2, 1])
                         
                         gender_param = [k for k in model.params.index if 'Gender' in k]
@@ -206,27 +212,33 @@ if uploaded_file is not None:
                                 ax_g.barh(['Gender Gap (Controlled)'], [gender_val], color=color)
                                 ax_g.axvline(0, color='black', linestyle='--')
                                 ax_g.set_xlabel("Log Point Difference", color='black', fontweight='bold')
+                                ax_g.set_title("Coefficient of Gender (Impact on Pay)", color='black', fontweight='bold')
                                 ax_g.tick_params(colors='black')
                                 ax_g.text(gender_val, 0, f" {gender_val:.4f}", va='center', fontweight='bold', color='black')
                                 st.pyplot(fig_gender)
 
                         with col_g_text:
-                            st.markdown("#### 📘 How to Read This")
+                            st.markdown("#### How to Read This")
                             if gender_val < 0:
                                 st.error(f"**Systemic Gap Detected: {gender_val:.1%}**")
                                 st.markdown(f"""
-                                This means that after we control for Experience, Band, and Role, **Female employees are still paid {abs(gender_val):.1%} less** than men. 
-                                
-                                **Action:** HR must audit the 'Outliers' in the Flight Risk tab to ensure no bias in historical hiring offers.
+                                **Interpretation:** The bar is RED and to the left. 
+                                This indicates that after controlling for Experience, Band, and Role, **Female employees are penalized by {abs(gender_val):.1%}** compared to men.
                                 """)
                             else:
                                 st.success("**No Systemic Bias**")
-                                st.markdown("The model shows no statistical penalty for gender. Any raw pay gaps are likely due to legitimate factors (e.g., more men in senior bands).")
+                                st.markdown("The bar is GREEN or near zero. The model shows no statistical penalty for gender. Any raw pay gaps are likely due to structural factors (e.g., representation in senior bands).")
 
                         st.divider()
 
                         # --- SKILL HETEROGENEITY ---
                         st.subheader("Skill Analysis: Job Family Premiums")
+                        
+                        st.markdown("""
+                        **Business Relevance:**
+                        A "One-Size-Fits-All" pay model fails in a complex organization. A 'Cloud Architect' costs more than an 'Administrator' even if they are in the same Band.
+                        This chart visualizes the **Market Premium** (or Discount) associated with specific job families, proving the model prices skills accurately.
+                        """)
                         
                         jf_params = {k.replace("C(Job_Family)[T.", "").replace("]", ""): v 
                                      for k, v in model.params.items() if "Job_Family" in k}
@@ -237,11 +249,12 @@ if uploaded_file is not None:
                             
                             fig_skill, ax_s = plt.subplots(figsize=(10, 5))
                             sns.barplot(data=df_jf, x='Coefficient', y='Job Family', palette='viridis', ax=ax_s)
-                            ax_s.set_title("Top 10 High-Value Skill Clusters", color='black', fontweight='bold')
-                            ax_s.set_xlabel("Premium above Baseline", color='black')
+                            ax_s.set_title("Top 10 High-Value Skill Clusters (Market Premium)", color='black', fontweight='bold')
+                            ax_s.set_xlabel("Premium above Baseline (Log Points)", color='black')
                             ax_s.tick_params(colors='black')
                             st.pyplot(fig_skill)
-                            st.caption("This proves we are not treating all 'Bands' the same. The model prices specific skills (e.g., Architecture) higher than others.")
+                            
+                            st.info("**Interpretation:** Bars extending to the right represent roles that command a higher salary in the market. The model adds this specific 'Skill Premium' to the Fair Pay calculation for these employees.")
 
                     except Exception as e:
                          st.error(f"Regression Error: {e}")
@@ -266,11 +279,11 @@ if uploaded_file is not None:
                 
                 def label_cluster(row):
                     if row['Clean_Rating'] >= avg_rating and row['Compa_Ratio'] < avg_compa:
-                        return "Flight Risk (Underpaid Star)"
+                        return "Flight Risk - Underpaid Star"
                     elif row['Clean_Rating'] >= avg_rating and row['Compa_Ratio'] >= avg_compa:
                         return "Stable Star"
                     elif row['Clean_Rating'] < avg_rating and row['Compa_Ratio'] >= avg_compa:
-                        return "Overpaid / Low Perf"
+                        return "Overpaid / Low Performance"
                     else:
                         return "Core Employee"
 
@@ -307,7 +320,7 @@ if uploaded_file is not None:
                 
                 col_roi_chart, col_roi_text = st.columns([2, 1])
                 
-                risks = df[df['Persona'] == "Flight Risk (Underpaid Star)"]
+                risks = df[df['Persona'] == "Flight Risk - Underpaid Star"]
                 total_correction_cost = (risks['P50_PPP'] - risks['Annual_TCC_PPP']).sum()
                 total_attrition_cost = risks['Annual_TCC_PPP'].sum() * 1.5 
                 
@@ -324,7 +337,7 @@ if uploaded_file is not None:
                     st.pyplot(fig_roi)
                 
                 with col_roi_text:
-                    st.markdown("#### 📘 Business Context")
+                    st.markdown("#### Business Context")
                     st.markdown(f"""
                     **The Logic:**
                     * **Correction Cost:** The exact budget needed to raise these specific "Underpaid Stars" to the Market Median.
